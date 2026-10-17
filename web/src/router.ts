@@ -75,7 +75,10 @@ const routes: RouteRecordRaw[] = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  // base 跟随 Vite 的 base：本地 '/' ，部署到子路径时 '/wms/'。
+  // 不带这个参数的话，history 模式会把 /wms/dashboard 当成一条不存在的路由，
+  // 页面能加载（nginx 正常返回 index.html）但渲染出的是应用自己的 404。
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
 

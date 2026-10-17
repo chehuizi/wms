@@ -16,8 +16,45 @@ WMS 仓储管理系统，前后端同仓。仓库根目录是 `wms`，下面两�
 **`docs/API_CONTRACT.md`** —— 基础主数据（仓库/库位/SKU/客户）的前后端事实来源。
 **`docs/API_CONTRACT_BIZ.md`** —— 业务模块（库存/入库/出库/盘点/报表）的事实来源，
 其中**第 10 节「库存核心不变式」是整个 WMS 的地基**，涉及库存的写操作都要逐条对照。
+**`docs/DEPLOY.md`** —— 线上部署事实（主机、目录、服务名、更新步骤、内存约束）。
 
 改接口必须先改对应契约文件，前后端都照它写。绕过契约直接改代码是本仓库最容易出问题的做法。
+
+## 数据库版本不一致（最容易翻车的一条）
+
+**本机开发是 PostgreSQL 16，线上服务器是 PostgreSQL 11.15。SQL 必须同时兼容两边。**
+
+已踩过的坑：`UNIQUE NULLS NOT DISTINCT` 是 PG 15+ 语法，在线上直接报错。
+已改用表达式索引（`COALESCE` 把 NULL 归一），两边行为一致。
+
+**改表结构后，不要只在本机 PG 16 验过就完事**，必须到 PG 11 上再跑一遍：
+
+```bash
+# 传到服务器临时库跑，跑完即删
+psql -h 127.0.0.1 -d postgres -c "CREATE DATABASE wms_scratch;"
+psql -h 127.0.0.1 -d wms_scratch -v ON_ERROR_STOP=1 -f <脚本>
+psql -h 127.0.0.1 -d postgres -c "DROP DATABASE wms_scratch;"
+```
+
+## 线上部署
+
+线上跑在 `root@101.37.146.194`，入口 **http://101.37.146.194/wms/**（子路径，因为裸 IP 已被 beeOS 占用）。
+同机还跑着 beeos-kanban / domainbox-console / thebestpractice4ai 等**其它项目，不得影响**。
+
+这台机器只有 **1.8 GB 内存且无 swap**，WMS 被 systemd `MemoryMax=560M` 硬限制住，
+这样即使 JVM 失控也只会影响自己，不会触发内核 OOM killer 杀掉别人的服务。
+加新服务前先算内存余量。详见 `docs/DEPLOY.md`。
+
+## 子路径部署的三个坑
+
+前端通过 `VITE_BASE=/wms/` 构建以支持挂在子路径下。改这三处时务必一起改：
+
+1. `vite.config.ts` 的 `base` —— 决定静态资源路径
+2. `src/api/request.ts` 的 `baseURL` —— 用 `import.meta.env.BASE_URL` 拼
+3. `src/router.ts` 的 `createWebHistory(...)` —— **必须传 base**
+
+第 3 条漏掉的后果特别隐蔽：页面能正常加载（nginx 照样返回 index.html，HTTP 200），
+但应用渲染出自己的 404 页。**HTTP 200 不等于能用。**
 
 ## Maven 镜像（本机网络限制，必读）
 

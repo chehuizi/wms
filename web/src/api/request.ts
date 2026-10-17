@@ -44,7 +44,9 @@ export class ApiError extends Error {
 }
 
 const service: AxiosInstance = axios.create({
-  baseURL: '/api/v1',
+  // 跟随 Vite 的 base：本地开发 BASE_URL='/' 得到 /api/v1；
+  // 部署到 /wms/ 子路径时得到 /wms/api/v1，交给 nginx 反代到后端。
+  baseURL: `${import.meta.env.BASE_URL}api/v1`,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json;charset=UTF-8',

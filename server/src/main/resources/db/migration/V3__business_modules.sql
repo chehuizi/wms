@@ -35,9 +35,13 @@ CREATE TABLE wms_inventory (
     CONSTRAINT fk_inventory_sku       FOREIGN KEY (sku_id)       REFERENCES wms_sku (id),
     CONSTRAINT ck_inventory_on_hand   CHECK (on_hand_qty >= 0),
     CONSTRAINT ck_inventory_locked    CHECK (locked_qty  >= 0),
-    CONSTRAINT ck_inventory_not_over_locked CHECK (locked_qty <= on_hand_qty),
-    CONSTRAINT uk_inventory_slot UNIQUE NULLS NOT DISTINCT (location_id, sku_id, batch_no, serial_no)
+    CONSTRAINT ck_inventory_not_over_locked CHECK (locked_qty <= on_hand_qty)
 );
+-- 库存台账唯一键：库位 + SKU + 批次 + 序列号，批次/序列号为 NULL 时视为同一个值。
+-- 这里用 COALESCE 表达式索引而不是 UNIQUE NULLS NOT DISTINCT，因为后者需要 PostgreSQL 15+，
+-- 而线上服务器是 PG 11。表达式索引从 9.0 就有，行为与需求一致。
+CREATE UNIQUE INDEX uk_inventory_slot
+    ON wms_inventory (location_id, sku_id, COALESCE(batch_no, ''), COALESCE(serial_no, ''));
 COMMENT ON TABLE  wms_inventory                      IS '库存台账';
 COMMENT ON COLUMN wms_inventory.on_hand_qty           IS '在库数量';
 COMMENT ON COLUMN wms_inventory.locked_qty            IS '锁定数量（已分配未出库）';
