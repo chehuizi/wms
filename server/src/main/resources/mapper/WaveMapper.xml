@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.WaveMapper">
+
+    <sql id="voColumns">
+        wv.id          AS id,
+        wv.wave_no     AS waveNo,
+        wv.warehouse_id AS warehouseId,
+        w.name         AS warehouseName,
+        wv.status      AS status,
+        wv.order_count AS orderCount,
+        wv.released_at AS releasedAt,
+        wv.finished_at AS finishedAt,
+        wv.operator    AS operator,
+        wv.created_at  AS createdAt
+    </sql>
+
+    <!-- 波次查询复用 BaseQuery：keyword 匹配波次号，status 为波次状态 -->
+    <sql id="pageWhere">
+        <where>
+            <if test="q.keyword != null and q.keyword != ''">
+                AND wv.wave_no ILIKE '%' || #{q.keyword} || '%'
+            </if>
+            <if test="q.status != null">
+                AND wv.status = #{q.status}
+            </if>
+            <if test="q.warehouseId != null">
+                AND wv.warehouse_id = #{q.warehouseId}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.WaveVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_wave wv
+        JOIN wms_warehouse w ON w.id = wv.warehouse_id
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_wave wv
+        <include refid="pageWhere"/>
+    </select>
+
+    <select id="selectVOById" resultType="com.wms.vo.WaveVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_wave wv
+        JOIN wms_warehouse w ON w.id = wv.warehouse_id
+        WHERE wv.id = #{id}
+    </select>
+
+    <sql id="entityColumns">
+        id, wave_no, warehouse_id, status, order_count, released_at, finished_at,
+        operator, created_at, updated_at
+    </sql>
+
+    <select id="selectById" resultType="com.wms.entity.Wave">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_wave
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectForUpdate" resultType="com.wms.entity.Wave">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_wave
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_wave (wave_no, warehouse_id, status, order_count)
+        VALUES (#{waveNo}, #{warehouseId}, #{status}, 0)
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE wms_wave
+        SET status     = #{status},
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="markReleased">
+        UPDATE wms_wave
+        SET status      = 2,
+            released_at = now(),
+            operator    = #{operator},
+            updated_at  = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="markFinished">
+        UPDATE wms_wave
+        SET status      = 4,
+            finished_at = now(),
+            updated_at  = now()
+        WHERE id = #{id}
+    </update>
+
+    <insert id="insertWaveOrder">
+        INSERT INTO wms_wave_order (wave_id, outbound_id)
+        VALUES (#{waveId}, #{outboundId})
+    </insert>
+
+    <update id="refreshOrderCount">
+        UPDATE wms_wave
+        SET order_count = (SELECT count(*) FROM wms_wave_order WHERE wave_id = #{waveId}),
+            updated_at = now()
+        WHERE id = #{waveId}
+    </update>
+
+    <select id="selectWaveOutboundIds" resultType="long">
+        SELECT outbound_id
+        FROM wms_wave_order
+        WHERE wave_id = #{waveId}
+        ORDER BY outbound_id
+    </select>
+
+    <select id="countWaveOutbound" resultType="int">
+        SELECT count(*) FROM wms_wave_order WHERE wave_id = #{waveId}
+    </select>
+
+    <select id="countUnfinishedPickTasks" resultType="int">
+        SELECT count(*)
+        FROM wms_pick_task
+        WHERE wave_id = #{waveId}
+          AND status IN (1, 2)
+    </select>
+
+</mapper>

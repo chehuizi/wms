@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.StockMovementMapper">
+
+    <sql id="voColumns">
+        m.id               AS id,
+        m.movement_no      AS movementNo,
+        m.movement_type    AS movementType,
+        CASE m.movement_type
+            WHEN 1 THEN '入库收货'
+            WHEN 2 THEN '出库发货'
+            WHEN 3 THEN '盘盈'
+            WHEN 4 THEN '盘亏'
+            WHEN 5 THEN '移库出'
+            WHEN 6 THEN '移库入'
+            WHEN 7 THEN '锁定'
+            WHEN 8 THEN '解锁'
+            WHEN 9 THEN '手工调整'
+            ELSE '未知'
+        END                 AS movementTypeName,
+        m.biz_type         AS bizType,
+        m.biz_no           AS bizNo,
+        m.warehouse_id     AS warehouseId,
+        w.name             AS warehouseName,
+        m.location_id      AS locationId,
+        l.code             AS locationCode,
+        m.sku_id           AS skuId,
+        s.code             AS skuCode,
+        s.name             AS skuName,
+        m.batch_no         AS batchNo,
+        m.serial_no        AS serialNo,
+        m.qty_change       AS qtyChange,
+        m.locked_change    AS lockedChange,
+        m.before_qty       AS beforeQty,
+        m.after_qty        AS afterQty,
+        m.operator         AS operator,
+        m.remark           AS remark,
+        m.created_at       AS createdAt
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (s.code ILIKE '%' || #{q.keyword} || '%'
+                     OR s.name ILIKE '%' || #{q.keyword} || '%')
+            </if>
+            <if test="q.warehouseId != null">
+                AND m.warehouse_id = #{q.warehouseId}
+            </if>
+            <if test="q.locationId != null">
+                AND m.location_id = #{q.locationId}
+            </if>
+            <if test="q.skuId != null">
+                AND m.sku_id = #{q.skuId}
+            </if>
+            <if test="q.movementType != null">
+                AND m.movement_type = #{q.movementType}
+            </if>
+            <if test="q.bizType != null and q.bizType != ''">
+                AND m.biz_type = #{q.bizType}
+            </if>
+            <if test="q.bizNo != null and q.bizNo != ''">
+                AND m.biz_no = #{q.bizNo}
+            </if>
+            <if test="q.startTime != null">
+                AND m.created_at &gt;= #{q.startTime}
+            </if>
+            <if test="q.endTime != null">
+                AND m.created_at &lt;= #{q.endTime}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.StockMovementVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_stock_movement m
+        JOIN wms_warehouse w ON w.id = m.warehouse_id
+        JOIN wms_location  l ON l.id = m.location_id
+        JOIN wms_sku       s ON s.id = m.sku_id
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_stock_movement m
+        JOIN wms_sku s ON s.id = m.sku_id
+        <include refid="pageWhere"/>
+    </select>
+
+    <!-- 流水只增不改不删（契约第 10.6 条），本 Mapper 不提供任何 update/delete -->
+    <insert id="insert">
+        INSERT INTO wms_stock_movement
+            (movement_no, movement_type, biz_type, biz_no,
+             warehouse_id, location_id, sku_id, batch_no, serial_no,
+             qty_change, locked_change, before_qty, after_qty, operator, remark)
+        VALUES
+            (#{movementNo}, #{movementType}, #{bizType}, #{bizNo},
+             #{warehouseId}, #{locationId}, #{skuId}, #{batchNo}, #{serialNo},
+             #{qtyChange}, #{lockedChange}, #{beforeQty}, #{afterQty}, #{operator}, #{remark})
+    </insert>
+
+</mapper>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.ShipmentMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_shipment
+            (shipment_no, outbound_id, carrier, tracking_no, shipped_at, operator, remark)
+        VALUES
+            (#{shipmentNo}, #{outboundId}, #{carrier}, #{trackingNo}, now(), #{operator}, #{remark})
+    </insert>
+
+    <select id="selectByOutboundId" resultType="com.wms.vo.ShipmentVO">
+        SELECT id          AS id,
+               shipment_no AS shipmentNo,
+               outbound_id AS outboundId,
+               carrier     AS carrier,
+               tracking_no AS trackingNo,
+               shipped_at  AS shippedAt,
+               operator    AS operator,
+               remark      AS remark
+        FROM wms_shipment
+        WHERE outbound_id = #{outboundId}
+        ORDER BY id
+    </select>
+
+</mapper>

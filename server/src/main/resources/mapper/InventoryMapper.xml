@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.InventoryMapper">
+
+    <sql id="columns">
+        id, warehouse_id, location_id, sku_id, batch_no, serial_no,
+        produced_date, expire_date, on_hand_qty, locked_qty,
+        status, remark, created_at, updated_at, deleted
+    </sql>
+
+    <!-- 带关联名称的查询列，availableQty 为计算字段（契约第 10.1 条：可用量不落库） -->
+    <sql id="voColumns">
+        i.id             AS id,
+        i.warehouse_id   AS warehouseId,
+        w.name           AS warehouseName,
+        i.location_id    AS locationId,
+        l.code           AS locationCode,
+        l.zone           AS zone,
+        i.sku_id         AS skuId,
+        s.code           AS skuCode,
+        s.name           AS skuName,
+        s.category       AS category,
+        s.unit           AS unit,
+        i.batch_no       AS batchNo,
+        i.serial_no      AS serialNo,
+        i.produced_date  AS producedDate,
+        i.expire_date    AS expireDate,
+        i.on_hand_qty    AS onHandQty,
+        i.locked_qty     AS lockedQty,
+        (i.on_hand_qty - i.locked_qty) AS availableQty,
+        i.status         AS status,
+        i.created_at     AS createdAt,
+        i.updated_at     AS updatedAt
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            i.deleted = 0
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (s.code     ILIKE '%' || #{q.keyword} || '%'
+                     OR s.name   ILIKE '%' || #{q.keyword} || '%'
+                     OR s.barcode ILIKE '%' || #{q.keyword} || '%')
+            </if>
+            <if test="q.warehouseId != null">
+                AND i.warehouse_id = #{q.warehouseId}
+            </if>
+            <if test="q.locationId != null">
+                AND i.location_id = #{q.locationId}
+            </if>
+            <if test="q.skuId != null">
+                AND i.sku_id = #{q.skuId}
+            </if>
+            <if test="q.category != null and q.category != ''">
+                AND s.category = #{q.category}
+            </if>
+            <if test="q.batchNo != null and q.batchNo != ''">
+                AND i.batch_no = #{q.batchNo}
+            </if>
+            <if test="q.status != null">
+                AND i.status = #{q.status}
+            </if>
+            <!-- onlyAvailable：只看在库量 > 0 的（契约第 13 节） -->
+            <if test="q.onlyAvailableResolved">
+                AND i.on_hand_qty > 0
+            </if>
+            <!-- includeLockedZero=false：排除已锁完（可用量为 0）的行 -->
+            <if test="q.includeLockedZeroResolved == false">
+                AND (i.on_hand_qty - i.locked_qty) > 0
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.InventoryVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_inventory i
+        JOIN wms_warehouse w ON w.id = i.warehouse_id
+        JOIN wms_location  l ON l.id = i.location_id
+        JOIN wms_sku       s ON s.id = i.sku_id
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_inventory i
+        JOIN wms_sku s ON s.id = i.sku_id
+        <include refid="pageWhere"/>
+    </select>
+
+    <select id="selectVOById" resultType="com.wms.vo.InventoryVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_inventory i
+        JOIN wms_warehouse w ON w.id = i.warehouse_id
+        JOIN wms_location  l ON l.id = i.location_id
+        JOIN wms_sku       s ON s.id = i.sku_id
+        WHERE i.id = #{id} AND i.deleted = 0
+    </select>
+
+    <select id="selectById" resultType="com.wms.entity.Inventory">
+        SELECT <include refid="columns"/>
+        FROM wms_inventory
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="selectByIdForUpdate" resultType="com.wms.entity.Inventory">
+        SELECT <include refid="columns"/>
+        FROM wms_inventory
+        WHERE id = #{id} AND deleted = 0
+        FOR UPDATE
+    </select>
+
+    <!--
+        按唯一键 uk_inventory_slot(location_id, sku_id, batch_no, serial_no) 取行。
+        该唯一约束是 NULLS NOT DISTINCT，Java 侧同样用 IS NOT DISTINCT FROM 才能命中同一行。
+        FOR UPDATE 是防超卖的核心（契约第 10.5 条）。
+    -->
+    <select id="selectForUpdateByKey" resultType="com.wms.entity.Inventory">
+        SELECT <include refid="columns"/>
+        FROM wms_inventory
+        WHERE location_id = #{locationId}
+          AND sku_id      = #{skuId}
+          AND batch_no    IS NOT DISTINCT FROM #{batchNo,jdbcType=VARCHAR}
+          AND serial_no   IS NOT DISTINCT FROM #{serialNo,jdbcType=VARCHAR}
+          AND deleted = 0
+        FOR UPDATE
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_inventory
+            (warehouse_id, location_id, sku_id, batch_no, serial_no,
+             produced_date, expire_date, on_hand_qty, locked_qty, status, deleted)
+        VALUES
+            (#{warehouseId}, #{locationId}, #{skuId}, #{batchNo}, #{serialNo},
+             #{producedDate}, #{expireDate}, 0, 0, 1, 0)
+    </insert>
+
+    <update id="updateQty">
+        UPDATE wms_inventory
+        SET on_hand_qty = #{onHandQty},
+            locked_qty  = #{lockedQty},
+            updated_at  = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <!--
+        FIFO 取库存：先临期（expire_date 早的），再生产日期早的，最后 id 小的。
+        到期日/生产日期为 NULL 的排在最后（NULLS LAST）。见契约第 16.2 条。
+        FOR UPDATE 一次性锁住所有候选行，避免并发放大后的超卖。
+    -->
+    <select id="selectAvailableForSkuFifo" resultType="com.wms.entity.Inventory">
+        SELECT <include refid="columns"/>
+        FROM wms_inventory
+        WHERE warehouse_id = #{warehouseId}
+          AND sku_id       = #{skuId}
+          AND deleted      = 0
+          AND status       = 1
+          AND (on_hand_qty - locked_qty) &gt; 0
+        ORDER BY expire_date ASC NULLS LAST,
+                 produced_date ASC NULLS LAST,
+                 id ASC
+        FOR UPDATE
+    </select>
+
+    <select id="sumInventory" resultType="com.wms.mapper.InventoryMapper$Sum">
+        SELECT COALESCE(SUM(on_hand_qty), 0) AS onHandQty,
+               COALESCE(SUM(on_hand_qty - locked_qty), 0) AS availableQty
+        FROM wms_inventory
+        WHERE deleted = 0
+    </select>
+
+</mapper>

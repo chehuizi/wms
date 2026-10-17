@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.PickTaskMapper">
+
+    <sql id="voColumns">
+        p.id               AS id,
+        p.task_no          AS taskNo,
+        p.wave_id          AS waveId,
+        wv.wave_no         AS waveNo,
+        p.outbound_id      AS outboundId,
+        o.order_no         AS outboundNo,
+        p.allocation_id    AS allocationId,
+        p.sku_id           AS skuId,
+        s.code             AS skuCode,
+        s.name             AS skuName,
+        p.from_location_id AS fromLocationId,
+        l.code             AS fromLocationCode,
+        p.sequence         AS sequence,
+        p.required_qty     AS requiredQty,
+        p.picked_qty       AS pickedQty,
+        p.status           AS status,
+        p.operator         AS operator,
+        p.picked_at        AS pickedAt,
+        p.created_at       AS createdAt
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            <if test="q.waveId != null">
+                AND p.wave_id = #{q.waveId}
+            </if>
+            <if test="q.outboundId != null">
+                AND p.outbound_id = #{q.outboundId}
+            </if>
+            <if test="q.skuId != null">
+                AND p.sku_id = #{q.skuId}
+            </if>
+            <if test="q.status != null">
+                AND p.status = #{q.status}
+            </if>
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (p.task_no ILIKE '%' || #{q.keyword} || '%'
+                     OR s.code   ILIKE '%' || #{q.keyword} || '%'
+                     OR s.name   ILIKE '%' || #{q.keyword} || '%')
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.PickTaskVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_pick_task p
+        JOIN wms_outbound_order o ON o.id = p.outbound_id
+        JOIN wms_sku s ON s.id = p.sku_id
+        JOIN wms_location l ON l.id = p.from_location_id
+        LEFT JOIN wms_wave wv ON wv.id = p.wave_id
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_pick_task p
+        JOIN wms_sku s ON s.id = p.sku_id
+        <include refid="pageWhere"/>
+    </select>
+
+    <sql id="entityColumns">
+        id, task_no, wave_id, outbound_id, allocation_id, sku_id, from_location_id,
+        sequence, required_qty, picked_qty, status, operator, picked_at, created_at, updated_at
+    </sql>
+
+    <select id="selectById" resultType="com.wms.entity.PickTask">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_pick_task
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectVOById" resultType="com.wms.vo.PickTaskVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_pick_task p
+        JOIN wms_outbound_order o ON o.id = p.outbound_id
+        JOIN wms_sku s ON s.id = p.sku_id
+        JOIN wms_location l ON l.id = p.from_location_id
+        LEFT JOIN wms_wave wv ON wv.id = p.wave_id
+        WHERE p.id = #{id}
+    </select>
+
+    <select id="selectForUpdate" resultType="com.wms.entity.PickTask">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_pick_task
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_pick_task
+            (task_no, wave_id, outbound_id, allocation_id, sku_id, from_location_id,
+             sequence, required_qty, status)
+        VALUES
+            (#{taskNo}, #{waveId}, #{outboundId}, #{allocationId}, #{skuId}, #{fromLocationId},
+             #{sequence}, #{requiredQty}, #{status})
+    </insert>
+
+    <update id="addPickedQty">
+        UPDATE wms_pick_task
+        SET picked_qty = picked_qty + #{delta},
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="markStatus">
+        UPDATE wms_pick_task
+        SET status     = #{status},
+            operator   = #{operator},
+            picked_at  = CASE WHEN #{status} = 3 THEN now() ELSE picked_at END,
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="cancelUnfinishedByAllocation">
+        UPDATE wms_pick_task
+        SET status     = 4,
+            updated_at = now()
+        WHERE allocation_id = #{allocationId}
+          AND status IN (1, 2)
+    </update>
+
+    <select id="countUnfinishedByOutbound" resultType="int">        SELECT count(*)
+        FROM wms_pick_task
+        WHERE outbound_id = #{outboundId}
+          AND status IN (1, 2)
+    </select>
+
+</mapper>

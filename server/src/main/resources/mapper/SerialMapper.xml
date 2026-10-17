@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.SerialMapper">
+
+    <sql id="voColumns">
+        sr.id           AS id,
+        sr.serial_no    AS serialNo,
+        sr.sku_id       AS skuId,
+        s.code          AS skuCode,
+        s.name          AS skuName,
+        sr.warehouse_id AS warehouseId,
+        w.name          AS warehouseName,
+        sr.location_id  AS locationId,
+        l.code          AS locationCode,
+        sr.status       AS status,
+        sr.in_bound_at  AS inBoundAt,
+        sr.out_bound_at AS outBoundAt,
+        sr.created_at   AS createdAt
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            sr.deleted = 0
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (sr.serial_no ILIKE '%' || #{q.keyword} || '%'
+                     OR s.code      ILIKE '%' || #{q.keyword} || '%'
+                     OR s.name      ILIKE '%' || #{q.keyword} || '%')
+            </if>
+            <if test="q.skuId != null">
+                AND sr.sku_id = #{q.skuId}
+            </if>
+            <if test="q.warehouseId != null">
+                AND sr.warehouse_id = #{q.warehouseId}
+            </if>
+            <if test="q.status != null">
+                AND sr.status = #{q.status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.SerialVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_serial sr
+        JOIN wms_sku       s ON s.id = sr.sku_id
+        LEFT JOIN wms_warehouse w ON w.id = sr.warehouse_id
+        LEFT JOIN wms_location  l ON l.id = sr.location_id
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_serial sr
+        JOIN wms_sku s ON s.id = sr.sku_id
+        <include refid="pageWhere"/>
+    </select>
+
+    <select id="selectVOById" resultType="com.wms.vo.SerialVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_serial sr
+        JOIN wms_sku       s ON s.id = sr.sku_id
+        LEFT JOIN wms_warehouse w ON w.id = sr.warehouse_id
+        LEFT JOIN wms_location  l ON l.id = sr.location_id
+        WHERE sr.id = #{id} AND sr.deleted = 0
+    </select>
+
+    <select id="selectBySerialNo" resultType="com.wms.entity.Serial">
+        SELECT id, serial_no, sku_id, warehouse_id, location_id, status,
+               in_bound_at, out_bound_at, created_at, updated_at, deleted
+        FROM wms_serial
+        WHERE serial_no = #{serialNo}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_serial
+            (serial_no, sku_id, warehouse_id, location_id, status, in_bound_at, deleted)
+        VALUES
+            (#{serialNo}, #{skuId}, #{warehouseId}, #{locationId}, #{status},
+             COALESCE(#{inBoundAt}, now()), 0)
+    </insert>
+
+    <!-- 移库时序列号随货移动，状态不变 -->
+    <update id="updateLocation">
+        UPDATE wms_serial
+        SET warehouse_id = #{warehouseId},
+            location_id  = #{locationId},
+            status       = #{status},
+            updated_at   = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="markOutbound">
+        UPDATE wms_serial
+        SET status       = 3,
+            out_bound_at = now(),
+            updated_at   = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="markStatus">
+        UPDATE wms_serial
+        SET status     = #{status},
+            updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+</mapper>

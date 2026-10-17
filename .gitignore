@@ -1,0 +1,38 @@
+# --- Java / Maven ---
+target/
+*.jar
+*.war
+*.class
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# --- Node ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- IDE ---
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.settings/
+.classpath
+.project
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- 本地环境与数据（不要提交） ---
+.env
+.env.local
+*.local.env
+application-local.yml
+application-local.yaml

@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.PutawayTaskMapper">
+
+    <sql id="voColumns">
+        t.id                AS id,
+        t.task_no           AS taskNo,
+        t.receipt_item_id   AS receiptItemId,
+        t.inbound_id        AS inboundId,
+        io.order_no         AS inboundNo,
+        t.sku_id            AS skuId,
+        s.code              AS skuCode,
+        s.name              AS skuName,
+        t.from_location_id  AS fromLocationId,
+        lf.code             AS fromLocationCode,
+        t.to_location_id    AS toLocationId,
+        lt.code             AS toLocationCode,
+        t.batch_no          AS batchNo,
+        t.serial_no         AS serialNo,
+        t.qty               AS qty,
+        t.status            AS status,
+        t.operator          AS operator,
+        t.executed_at       AS executedAt,
+        t.created_at        AS createdAt
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            <if test="q.inboundId != null">
+                AND t.inbound_id = #{q.inboundId}
+            </if>
+            <if test="q.skuId != null">
+                AND t.sku_id = #{q.skuId}
+            </if>
+            <if test="q.status != null">
+                AND t.status = #{q.status}
+            </if>
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (t.task_no ILIKE '%' || #{q.keyword} || '%'
+                     OR s.code   ILIKE '%' || #{q.keyword} || '%'
+                     OR s.name   ILIKE '%' || #{q.keyword} || '%')
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.PutawayTaskVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_putaway_task t
+        JOIN wms_inbound_order io ON io.id = t.inbound_id
+        JOIN wms_sku s ON s.id = t.sku_id
+        JOIN wms_location lf ON lf.id = t.from_location_id
+        LEFT JOIN wms_location lt ON lt.id = t.to_location_id
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_putaway_task t
+        JOIN wms_sku s ON s.id = t.sku_id
+        <include refid="pageWhere"/>
+    </select>
+
+    <sql id="entityColumns">
+        id, task_no, receipt_item_id, inbound_id, sku_id, from_location_id, to_location_id,
+        batch_no, serial_no, qty, status, operator, executed_at, created_at, updated_at
+    </sql>
+
+    <select id="selectById" resultType="com.wms.entity.PutawayTask">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_putaway_task
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectVOById" resultType="com.wms.vo.PutawayTaskVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_putaway_task t
+        JOIN wms_inbound_order io ON io.id = t.inbound_id
+        JOIN wms_sku s ON s.id = t.sku_id
+        JOIN wms_location lf ON lf.id = t.from_location_id
+        LEFT JOIN wms_location lt ON lt.id = t.to_location_id
+        WHERE t.id = #{id}
+    </select>
+
+    <select id="selectForUpdate" resultType="com.wms.entity.PutawayTask">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_putaway_task
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_putaway_task
+            (task_no, receipt_item_id, inbound_id, sku_id, from_location_id, to_location_id,
+             batch_no, serial_no, qty, status)
+        VALUES
+            (#{taskNo}, #{receiptItemId}, #{inboundId}, #{skuId}, #{fromLocationId}, #{toLocationId},
+             #{batchNo}, #{serialNo}, #{qty}, #{status})
+    </insert>
+
+    <update id="markCompleted">
+        UPDATE wms_putaway_task
+        SET status        = 2,
+            to_location_id = #{toLocationId},
+            operator      = #{operator},
+            executed_at   = now(),
+            updated_at    = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="markCancelled">
+        UPDATE wms_putaway_task
+        SET status     = 3,
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+</mapper>

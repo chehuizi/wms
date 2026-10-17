@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.ReportMapper">
+
+    <!--
+        报表一律只读，不新建任何表，全部基于 wms_stock_movement 与 wms_inventory 聚合（契约第 18 节）。
+        统计一律带 deleted = 0。
+    -->
+
+    <select id="countWarehouse" resultType="long">
+        SELECT count(*) FROM wms_warehouse WHERE deleted = 0
+    </select>
+
+    <select id="countLocation" resultType="long">
+        SELECT count(*) FROM wms_location WHERE deleted = 0
+    </select>
+
+    <select id="countSku" resultType="long">
+        SELECT count(*) FROM wms_sku WHERE deleted = 0
+    </select>
+
+    <select id="countCustomer" resultType="long">
+        SELECT count(*) FROM wms_customer WHERE deleted = 0
+    </select>
+
+    <!-- 30 天内到期的 SKU 数：在库且到期日落在 [今天, 今天+30] -->
+    <select id="countExpiringSoonSku" resultType="long">
+        SELECT count(DISTINCT sku_id)
+        FROM wms_inventory
+        WHERE deleted = 0
+          AND on_hand_qty &gt; 0
+          AND expire_date IS NOT NULL
+          AND expire_date &gt;= CURRENT_DATE
+          AND expire_date &lt;= CURRENT_DATE + 30
+    </select>
+
+    <select id="countInboundOrders" resultType="long">
+        SELECT count(*)
+        FROM wms_inbound_order
+        WHERE deleted = 0
+          AND created_at &gt;= #{start}
+          AND created_at &lt; #{end}
+    </select>
+
+    <select id="countOutboundOrders" resultType="long">
+        SELECT count(*)
+        FROM wms_outbound_order
+        WHERE deleted = 0
+          AND created_at &gt;= #{start}
+          AND created_at &lt; #{end}
+    </select>
+
+    <select id="countPendingPutawayTasks" resultType="long">
+        SELECT count(*) FROM wms_putaway_task WHERE status = 1
+    </select>
+
+    <select id="countPendingPickTasks" resultType="long">
+        SELECT count(*) FROM wms_pick_task WHERE status IN (1, 2)
+    </select>
+
+    <select id="countStocktakeInProgress" resultType="long">
+        SELECT count(*)
+        FROM wms_stocktake_order
+        WHERE deleted = 0
+          AND status IN (2, 3)
+    </select>
+
+    <!--
+        库存汇总分片，groupBy = warehouse / category / sku。
+        分组键与分组名都在 SQL 里算好，Java 侧不参与聚合。
+    -->
+    <select id="selectInventorySummary" resultType="com.wms.vo.InventorySummaryRowVO">
+        SELECT
+        <choose>
+            <when test="'warehouse'.equals(groupBy)">i.warehouse_id</when>
+            <when test="'category'.equals(groupBy)">COALESCE(s.category, '未分类')</when>
+            <otherwise>i.sku_id</otherwise>
+        </choose>
+            AS groupKey,
+        <choose>
+            <when test="'warehouse'.equals(groupBy)">w.name</when>
+            <when test="'category'.equals(groupBy)">COALESCE(s.category, '未分类')</when>
+            <otherwise>CONCAT(s.code, ' ', s.name)</otherwise>
+        </choose>
+            AS groupName,
+        count(DISTINCT i.sku_id) AS skuCount,
+        COALESCE(sum(i.on_hand_qty), 0) AS onHandQty,
+        COALESCE(sum(i.locked_qty), 0)  AS lockedQty,
+        COALESCE(sum(i.on_hand_qty - i.locked_qty), 0) AS availableQty
+        FROM wms_inventory i
+        JOIN wms_sku       s ON s.id = i.sku_id
+        JOIN wms_warehouse w ON w.id = i.warehouse_id
+        WHERE i.deleted = 0
+        <if test="warehouseId != null">
+            AND i.warehouse_id = #{warehouseId}
+        </if>
+        <if test="category != null and category != ''">
+            AND s.category = #{category}
+        </if>
+        GROUP BY 1, 2
+        ORDER BY 2
+    </select>
+
+    <!--
+        出入库统计：基于 wms_stock_movement 聚合。
+        入库取 movement_type = 1 的 qty_change，出库取 movement_type = 2 的 -qty_change（流水记负数，报表按正数展示）。
+        时间维度 day / week / month，时区固定按 Asia/Shanghai 分桶。
+    -->
+    <select id="selectInboundOutbound" resultType="com.wms.vo.InboundOutboundRowVO">
+        WITH periods AS (
+            SELECT
+            <choose>
+                <when test="'week'.equals(granularity)">
+                    to_char(date_trunc('week', m.created_at AT TIME ZONE 'Asia/Shanghai'), 'YYYY-MM-DD')
+                </when>
+                <when test="'month'.equals(granularity)">
+                    to_char(m.created_at AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM')
+                </when>
+                <otherwise>
+                    to_char(m.created_at AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD')
+                </otherwise>
+            </choose>
+                    AS period,
+                    m.movement_type AS movement_type,
+                    m.qty_change    AS qty_change,
+                    m.biz_no        AS biz_no
+            FROM wms_stock_movement m
+            WHERE m.created_at &gt;= #{start}
+              AND m.created_at &lt; #{end}
+              AND m.movement_type IN (1, 2)
+            <if test="warehouseId != null">
+                AND m.warehouse_id = #{warehouseId}
+            </if>
+        ),
+        inbound AS (
+            SELECT period,
+                   COALESCE(sum(qty_change), 0)      AS inboundQty,
+                   count(DISTINCT biz_no)             AS inboundOrders
+            FROM periods
+            WHERE movement_type = 1
+            GROUP BY period
+        ),
+        outbound AS (
+            SELECT period,
+                   COALESCE(sum(-qty_change), 0)     AS outboundQty,
+                   count(DISTINCT biz_no)            AS outboundOrders
+            FROM periods
+            WHERE movement_type = 2
+            GROUP BY period
+        )
+        SELECT COALESCE(i.period, o.period)             AS period,
+               COALESCE(i.inboundQty, 0)               AS inboundQty,
+               COALESCE(i.inboundOrders, 0)            AS inboundOrders,
+               COALESCE(o.outboundQty, 0)              AS outboundQty,
+               COALESCE(o.outboundOrders, 0)           AS outboundOrders
+        FROM inbound i
+        FULL OUTER JOIN outbound o ON o.period = i.period
+        ORDER BY 1
+    </select>
+
+    <!--
+        库龄分析：按「最后一次入库（movement_type = 1）距今天数」分桶。
+        本版 SKU 无成本字段，value 固定返回 0（契约第 18.4 节）。
+    -->
+    <select id="selectStockAging" resultType="com.wms.vo.InventorySummaryRowVO">
+        WITH inventory_rows AS (
+            SELECT i.sku_id,
+                   i.on_hand_qty,
+                   GREATEST(
+                       COALESCE(
+                           (SELECT max(m.created_at)
+                            FROM wms_stock_movement m
+                            WHERE m.location_id  = i.location_id
+                              AND m.sku_id        = i.sku_id
+                              AND m.movement_type = 1
+                              AND m.batch_no      IS NOT DISTINCT FROM i.batch_no),
+                           i.created_at
+                       ),
+                       i.created_at
+                   ) AS last_inbound_at
+            FROM wms_inventory i
+            JOIN wms_sku       s ON s.id = i.sku_id
+            JOIN wms_warehouse w ON w.id = i.warehouse_id
+            WHERE i.deleted = 0
+              AND i.on_hand_qty &gt; 0
+            <if test="warehouseId != null">
+                AND i.warehouse_id = #{warehouseId}
+            </if>
+            <if test="category != null and category != ''">
+                AND s.category = #{category}
+            </if>
+        ),
+        aged AS (
+            SELECT sku_id,
+                   on_hand_qty,
+                   (CURRENT_DATE - (last_inbound_at AT TIME ZONE 'Asia/Shanghai')::date) AS age_days
+            FROM inventory_rows
+        )
+        SELECT CASE
+                   WHEN age_days &lt;= 30 THEN '0-30天'
+                   WHEN age_days &lt;= 60 THEN '31-60天'
+                   WHEN age_days &lt;= 90 THEN '61-90天'
+                   ELSE '90天以上'
+               END          AS groupKey,
+               count(DISTINCT sku_id) AS skuCount,
+               COALESCE(sum(on_hand_qty), 0) AS onHandQty,
+               0::numeric   AS lockedQty,
+               0::numeric   AS availableQty
+        FROM aged
+        GROUP BY 1
+    </select>
+
+</mapper>

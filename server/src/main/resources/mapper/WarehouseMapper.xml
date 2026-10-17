@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.WarehouseMapper">
+
+    <sql id="columns">
+        id, code, name, address, contact_name, contact_phone,
+        status, remark, created_at, updated_at, deleted
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            deleted = 0
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (code ILIKE '%' || #{q.keyword} || '%'
+                     OR name ILIKE '%' || #{q.keyword} || '%')
+            </if>
+            <if test="q.status != null">
+                AND status = #{q.status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.entity.Warehouse">
+        SELECT <include refid="columns"/>
+        FROM wms_warehouse
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_warehouse
+        <include refid="pageWhere"/>
+    </select>
+
+    <select id="selectById" resultType="com.wms.entity.Warehouse">
+        SELECT <include refid="columns"/>
+        FROM wms_warehouse
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="selectByCode" resultType="com.wms.entity.Warehouse">
+        SELECT <include refid="columns"/>
+        FROM wms_warehouse
+        WHERE code = #{code} AND deleted = 0
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_warehouse
+            (code, name, address, contact_name, contact_phone, status, remark, deleted)
+        VALUES
+            (#{code}, #{name}, #{address}, #{contactName}, #{contactPhone},
+             #{status}, #{remark}, 0)
+    </insert>
+
+    <update id="update">
+        UPDATE wms_warehouse
+        SET code          = #{code},
+            name          = #{name},
+            address       = #{address},
+            contact_name  = #{contactName},
+            contact_phone = #{contactPhone},
+            status        = #{status},
+            remark        = #{remark},
+            updated_at    = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE wms_warehouse
+        SET deleted = 1, updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="softDeleteByIds">
+        UPDATE wms_warehouse
+        SET deleted = 1, updated_at = now()
+        WHERE deleted = 0
+        AND id IN
+        <foreach collection="ids" item="it" open="(" separator="," close=")">
+            #{it}
+        </foreach>
+    </update>
+
+</mapper>

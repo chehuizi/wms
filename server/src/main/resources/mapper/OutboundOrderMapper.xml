@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.OutboundOrderMapper">
+
+    <sql id="voColumns">
+        o.id                AS id,
+        o.order_no          AS orderNo,
+        o.warehouse_id      AS warehouseId,
+        w.name              AS warehouseName,
+        o.customer_id       AS customerId,
+        c.name              AS customerName,
+        o.status            AS status,
+        o.priority          AS priority,
+        o.expected_ship_at  AS expectedShipAt,
+        o.shipped_at        AS shippedAt,
+        o.remark            AS remark,
+        (SELECT count(*) FROM wms_outbound_item it WHERE it.outbound_id = o.id) AS itemCount,
+        (SELECT COALESCE(sum(it.ordered_qty), 0) FROM wms_outbound_item it WHERE it.outbound_id = o.id) AS orderedQty,
+        (SELECT COALESCE(sum(it.allocated_qty), 0) FROM wms_outbound_item it WHERE it.outbound_id = o.id) AS allocatedQty,
+        (SELECT COALESCE(sum(it.picked_qty), 0) FROM wms_outbound_item it WHERE it.outbound_id = o.id) AS pickedQty,
+        (SELECT COALESCE(sum(it.shipped_qty), 0) FROM wms_outbound_item it WHERE it.outbound_id = o.id) AS shippedQty,
+        o.created_at        AS createdAt,
+        o.updated_at        AS updatedAt
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            o.deleted = 0
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (o.order_no ILIKE '%' || #{q.keyword} || '%'
+                     OR c.name    ILIKE '%' || #{q.keyword} || '%')
+            </if>
+            <if test="q.warehouseId != null">
+                AND o.warehouse_id = #{q.warehouseId}
+            </if>
+            <if test="q.customerId != null">
+                AND o.customer_id = #{q.customerId}
+            </if>
+            <if test="q.status != null">
+                AND o.status = #{q.status}
+            </if>
+            <if test="q.startTime != null">
+                AND o.created_at &gt;= #{q.startTime}
+            </if>
+            <if test="q.endTime != null">
+                AND o.created_at &lt;= #{q.endTime}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.OutboundOrderVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_outbound_order o
+        JOIN wms_warehouse w ON w.id = o.warehouse_id
+        LEFT JOIN wms_customer c ON c.id = o.customer_id
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_outbound_order o
+        LEFT JOIN wms_customer c ON c.id = o.customer_id
+        <include refid="pageWhere"/>
+    </select>
+
+    <select id="selectVOById" resultType="com.wms.vo.OutboundOrderVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_outbound_order o
+        JOIN wms_warehouse w ON w.id = o.warehouse_id
+        LEFT JOIN wms_customer c ON c.id = o.customer_id
+        WHERE o.id = #{id} AND o.deleted = 0
+    </select>
+
+    <sql id="entityColumns">
+        id, order_no, warehouse_id, customer_id, status, priority,
+        expected_ship_at, shipped_at, remark, created_at, updated_at, deleted
+    </sql>
+
+    <select id="selectById" resultType="com.wms.entity.OutboundOrder">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_outbound_order
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="selectForUpdate" resultType="com.wms.entity.OutboundOrder">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_outbound_order
+        WHERE id = #{id} AND deleted = 0
+        FOR UPDATE
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_outbound_order
+            (order_no, warehouse_id, customer_id, status, priority, expected_ship_at, remark, deleted)
+        VALUES
+            (#{orderNo}, #{warehouseId}, #{customerId}, #{status}, #{priority},
+             #{expectedShipAt}, #{remark}, 0)
+    </insert>
+
+    <update id="update">
+        UPDATE wms_outbound_order
+        SET warehouse_id     = #{warehouseId},
+            customer_id      = #{customerId},
+            priority         = #{priority},
+            expected_ship_at = #{expectedShipAt},
+            remark           = #{remark},
+            updated_at       = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="updateStatus">
+        UPDATE wms_outbound_order
+        SET status     = #{status},
+            updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="markShipped">
+        UPDATE wms_outbound_order
+        SET status     = 6,
+            shipped_at = now(),
+            updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE wms_outbound_order
+        SET deleted    = 1,
+            updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <delete id="deleteItems">
+        DELETE FROM wms_outbound_item WHERE outbound_id = #{outboundId}
+    </delete>
+
+    <!-- 明细 -->
+
+    <insert id="insertItem" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_outbound_item (outbound_id, sku_id, ordered_qty)
+        VALUES (#{outboundId}, #{skuId}, #{orderedQty})
+    </insert>
+
+    <select id="selectItems" resultType="com.wms.entity.OutboundItem">
+        SELECT id, outbound_id, sku_id, ordered_qty, allocated_qty, picked_qty, shipped_qty,
+               created_at, updated_at
+        FROM wms_outbound_item
+        WHERE outbound_id = #{outboundId}
+        ORDER BY id
+    </select>
+
+    <select id="selectItemVOs" resultType="com.wms.vo.OutboundItemVO">
+        SELECT it.id            AS id,
+               it.outbound_id   AS outboundId,
+               it.sku_id        AS skuId,
+               s.code           AS skuCode,
+               s.name           AS skuName,
+               s.unit           AS unit,
+               it.ordered_qty   AS orderedQty,
+               it.allocated_qty AS allocatedQty,
+               it.picked_qty    AS pickedQty,
+               it.shipped_qty   AS shippedQty
+        FROM wms_outbound_item it
+        JOIN wms_sku s ON s.id = it.sku_id
+        WHERE it.outbound_id = #{outboundId}
+        ORDER BY it.id
+    </select>
+
+    <sql id="itemColumns">
+        id, outbound_id, sku_id, ordered_qty, allocated_qty, picked_qty, shipped_qty,
+        created_at, updated_at
+    </sql>
+
+    <select id="selectItemById" resultType="com.wms.entity.OutboundItem">
+        SELECT <include refid="itemColumns"/>
+        FROM wms_outbound_item
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectItemForUpdate" resultType="com.wms.entity.OutboundItem">
+        SELECT <include refid="itemColumns"/>
+        FROM wms_outbound_item
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <update id="addAllocatedQty">
+        UPDATE wms_outbound_item
+        SET allocated_qty = allocated_qty + #{delta},
+            updated_at    = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="addPickedQty">
+        UPDATE wms_outbound_item
+        SET picked_qty = picked_qty + #{delta},
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="addShippedQty">
+        UPDATE wms_outbound_item
+        SET shipped_qty = shipped_qty + #{delta},
+            updated_at  = now()
+        WHERE id = #{id}
+    </update>
+
+    <select id="countUnpickedItems" resultType="int">
+        SELECT count(*)
+        FROM wms_outbound_item
+        WHERE outbound_id = #{outboundId}
+          AND picked_qty &lt; ordered_qty
+    </select>
+
+    <select id="countUnallocatedItems" resultType="int">
+        SELECT count(*)
+        FROM wms_outbound_item
+        WHERE outbound_id = #{outboundId}
+          AND allocated_qty &lt; ordered_qty
+    </select>
+
+    <!-- 分配记录 -->
+
+    <sql id="allocationColumns">
+        id, outbound_id, outbound_item_id, inventory_id, warehouse_id, location_id, sku_id,
+        batch_no, allocated_qty, picked_qty, shipped_qty, status, created_at, updated_at
+    </sql>
+
+    <insert id="insertAllocation" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_allocation
+            (outbound_id, outbound_item_id, inventory_id, warehouse_id, location_id,
+             sku_id, batch_no, allocated_qty, status)
+        VALUES
+            (#{outboundId}, #{outboundItemId}, #{inventoryId}, #{warehouseId}, #{locationId},
+             #{skuId}, #{batchNo}, #{allocatedQty}, #{status})
+    </insert>
+
+    <select id="selectAllocations" resultType="com.wms.entity.Allocation">
+        SELECT <include refid="allocationColumns"/>
+        FROM wms_allocation
+        WHERE outbound_id = #{outboundId}
+        ORDER BY id
+    </select>
+
+    <select id="selectAllocationById" resultType="com.wms.entity.Allocation">
+        SELECT <include refid="allocationColumns"/>
+        FROM wms_allocation
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectAllocationForUpdate" resultType="com.wms.entity.Allocation">
+        SELECT <include refid="allocationColumns"/>
+        FROM wms_allocation
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <select id="selectAllocationsByStatus" resultType="com.wms.entity.Allocation">
+        SELECT <include refid="allocationColumns"/>
+        FROM wms_allocation
+        WHERE outbound_id = #{outboundId}
+        AND status IN
+        <foreach collection="statuses" item="st" open="(" separator="," close=")">
+            #{st}
+        </foreach>
+        ORDER BY id
+    </select>
+
+    <update id="addAllocationPickedQty">
+        UPDATE wms_allocation
+        SET picked_qty = picked_qty + #{delta},
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="addAllocationShippedQty">
+        UPDATE wms_allocation
+        SET shipped_qty = shipped_qty + #{delta},
+            updated_at  = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="markAllocationStatus">
+        UPDATE wms_allocation
+        SET status     = #{status},
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectAllocationVOs" resultType="com.wms.vo.AllocationVO">
+        SELECT a.id               AS id,
+               a.outbound_id      AS outboundId,
+               a.outbound_item_id AS outboundItemId,
+               a.inventory_id     AS inventoryId,
+               a.warehouse_id     AS warehouseId,
+               a.location_id      AS locationId,
+               l.code             AS locationCode,
+               a.sku_id           AS skuId,
+               s.code             AS skuCode,
+               s.name             AS skuName,
+               a.batch_no         AS batchNo,
+               a.allocated_qty    AS allocatedQty,
+               a.picked_qty       AS pickedQty,
+               a.shipped_qty      AS shippedQty,
+               a.status           AS status,
+               a.created_at       AS createdAt
+        FROM wms_allocation a
+        JOIN wms_location l ON l.id = a.location_id
+        JOIN wms_sku      s ON s.id = a.sku_id
+        WHERE a.outbound_id = #{outboundId}
+        ORDER BY a.id
+    </select>
+
+</mapper>

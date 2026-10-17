@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.DocNoMapper">
+
+    <!--
+        单据号规则见契约第 11 节：前缀 + yyyyMMdd + 日内序号。
+        不新建序列表，用事务级 advisory lock 把同前缀的取号串行化，
+        避免并发下两个事务算出同一个序号。
+        注意：pg_advisory_xact_lock 必须在事务内调用，
+        所有调用方（各 Service 的 create/receipt/... 方法）都是 @Transactional。
+    -->
+    <select id="lockDocNo" resultType="java.lang.String">
+        SELECT pg_advisory_xact_lock(hashtext(#{key}))::text
+    </select>
+
+    <!--
+        取当天已用掉的最大序号。table / column 不来自请求，
+        由 Java 侧 DocNoGenerator 白名单映射后传入。
+        right(col, digits) 取单据号末 digits 位作为序号，::int 后取 MAX。
+    -->
+    <select id="selectMaxSeq" resultType="int">
+        SELECT COALESCE(MAX(right(${column}, #{digits})::int), 0)
+        FROM ${table}
+        WHERE ${column} LIKE #{likePrefix}
+    </select>
+
+</mapper>

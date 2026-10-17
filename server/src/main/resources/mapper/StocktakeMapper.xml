@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.StocktakeMapper">
+
+    <sql id="voColumns">
+        o.id               AS id,
+        o.order_no         AS orderNo,
+        o.warehouse_id     AS warehouseId,
+        w.name             AS warehouseName,
+        o.stocktake_type   AS stocktakeType,
+        o.status           AS status,
+        o.scope_zone       AS scopeZone,
+        o.total_locations  AS totalLocations,
+        o.counted_locations AS countedLocations,
+        (SELECT count(*) FROM wms_stocktake_item it WHERE it.stocktake_id = o.id) AS totalItems,
+        (SELECT count(*) FROM wms_stocktake_item it WHERE it.stocktake_id = o.id AND it.counted_qty IS NOT NULL) AS countedItems,
+        (SELECT count(*) FROM wms_stocktake_item it WHERE it.stocktake_id = o.id AND it.diff_qty IS NOT NULL AND it.diff_qty &lt;&gt; 0) AS diffItems,
+        (SELECT COALESCE(sum(it.diff_qty), 0) FROM wms_stocktake_item it WHERE it.stocktake_id = o.id) AS diffQty,
+        o.started_at       AS startedAt,
+        o.finished_at      AS finishedAt,
+        o.approved_at      AS approvedAt,
+        o.approver         AS approver,
+        o.remark           AS remark,
+        o.created_at       AS createdAt
+    </sql>
+
+    <sql id="itemColumns">
+        id, stocktake_id, location_id, sku_id, batch_no, inventory_id,
+        book_qty, counted_qty, diff_qty, status, counted_by, counted_at,
+        remark, created_at, updated_at
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            o.deleted = 0
+            <if test="q.keyword != null and q.keyword != ''">
+                AND o.order_no ILIKE '%' || #{q.keyword} || '%'
+            </if>
+            <if test="q.warehouseId != null">
+                AND o.warehouse_id = #{q.warehouseId}
+            </if>
+            <if test="q.status != null">
+                AND o.status = #{q.status}
+            </if>
+            <if test="q.stocktakeType != null">
+                AND o.stocktake_type = #{q.stocktakeType}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.StocktakeOrderVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_stocktake_order o
+        JOIN wms_warehouse w ON w.id = o.warehouse_id
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_stocktake_order o
+        <include refid="pageWhere"/>
+    </select>
+
+    <select id="selectVOById" resultType="com.wms.vo.StocktakeOrderVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_stocktake_order o
+        JOIN wms_warehouse w ON w.id = o.warehouse_id
+        WHERE o.id = #{id} AND o.deleted = 0
+    </select>
+
+    <sql id="entityColumns">
+        id, order_no, warehouse_id, stocktake_type, status, scope_zone,
+        total_locations, counted_locations, started_at, finished_at,
+        approved_at, approver, remark, created_at, updated_at, deleted
+    </sql>
+
+    <select id="selectById" resultType="com.wms.entity.StocktakeOrder">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_stocktake_order
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="selectForUpdate" resultType="com.wms.entity.StocktakeOrder">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_stocktake_order
+        WHERE id = #{id} AND deleted = 0
+        FOR UPDATE
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_stocktake_order
+            (order_no, warehouse_id, stocktake_type, status, scope_zone,
+             total_locations, counted_locations, remark, deleted)
+        VALUES
+            (#{orderNo}, #{warehouseId}, #{stocktakeType}, #{status}, #{scopeZone},
+             0, 0, #{remark}, 0)
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE wms_stocktake_order
+        SET status     = #{status},
+            updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="markStarted">
+        UPDATE wms_stocktake_order
+        SET status      = 2,
+            started_at  = now(),
+            updated_at  = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="markFinished">
+        UPDATE wms_stocktake_order
+        SET finished_at = now(),
+            updated_at  = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="markApproved">
+        UPDATE wms_stocktake_order
+        SET status       = 4,
+            approver     = #{approver},
+            approved_at  = now(),
+            updated_at   = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="markCancelled">
+        UPDATE wms_stocktake_order
+        SET status     = 5,
+            updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE wms_stocktake_order
+        SET deleted    = 1,
+            updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <delete id="deleteItems">
+        DELETE FROM wms_stocktake_item WHERE stocktake_id = #{stocktakeId}
+    </delete>
+
+    <update id="setTotalLocations">
+        UPDATE wms_stocktake_order
+        SET total_locations = #{totalLocations},
+            updated_at     = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <!-- 明细 -->
+
+    <!--
+        创建盘点单时一次性生成明细：范围内所有启用库位下 on_hand_qty > 0 的库存行，
+        bookQty 取生成时刻的 on_hand_qty 快照（契约第 17 节创建规则）。
+    -->
+    <insert id="insertItemsFromInventory">
+        INSERT INTO wms_stocktake_item
+            (stocktake_id, location_id, sku_id, batch_no, inventory_id, book_qty, status)
+        SELECT #{stocktakeId}, i.location_id, i.sku_id, i.batch_no, i.id, i.on_hand_qty, 1
+        FROM wms_inventory i
+        JOIN wms_location l ON l.id = i.location_id
+        WHERE i.warehouse_id = #{warehouseId}
+          AND i.deleted = 0
+          AND i.on_hand_qty &gt; 0
+          AND l.deleted = 0
+          AND l.status = 1
+        <if test="scopeZone != null and scopeZone != ''">
+            AND l.zone = #{scopeZone}
+        </if>
+    </insert>
+
+    <select id="selectItems" resultType="com.wms.vo.StocktakeItemVO">
+        SELECT it.id            AS id,
+               it.stocktake_id  AS stocktakeId,
+               it.location_id   AS locationId,
+               l.code           AS locationCode,
+               it.sku_id        AS skuId,
+               s.code           AS skuCode,
+               s.name           AS skuName,
+               s.unit           AS unit,
+               it.batch_no      AS batchNo,
+               it.inventory_id  AS inventoryId,
+               it.book_qty      AS bookQty,
+               it.counted_qty   AS countedQty,
+               it.diff_qty      AS diffQty,
+               it.status        AS status,
+               it.counted_by    AS countedBy,
+               it.counted_at    AS countedAt,
+               it.remark        AS remark
+        FROM wms_stocktake_item it
+        JOIN wms_location l ON l.id = it.location_id
+        JOIN wms_sku      s ON s.id = it.sku_id
+        WHERE it.stocktake_id = #{stocktakeId}
+        ORDER BY l.code, it.id
+    </select>
+
+    <select id="selectItemEntities" resultType="com.wms.entity.StocktakeItem">
+        SELECT <include refid="itemColumns"/>
+        FROM wms_stocktake_item
+        WHERE stocktake_id = #{stocktakeId}
+        ORDER BY id
+    </select>
+
+    <update id="refreshCountedLocations">
+        UPDATE wms_stocktake_order
+        SET counted_locations = (
+                SELECT count(DISTINCT location_id)
+                FROM wms_stocktake_item
+                WHERE stocktake_id = #{stocktakeId}
+                  AND counted_qty IS NOT NULL
+            ),
+            updated_at = now()
+        WHERE id = #{stocktakeId}
+    </update>
+
+    <select id="selectItemById" resultType="com.wms.entity.StocktakeItem">
+        SELECT <include refid="itemColumns"/>
+        FROM wms_stocktake_item
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectItemForUpdate" resultType="com.wms.entity.StocktakeItem">
+        SELECT <include refid="itemColumns"/>
+        FROM wms_stocktake_item
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <!-- 重复提交同一 item 视为覆盖：实盘数量与差异一并重写 -->
+    <update id="updateCounted">
+        UPDATE wms_stocktake_item
+        SET counted_qty = #{countedQty},
+            diff_qty    = #{diffQty},
+            counted_by  = #{countedBy},
+            counted_at  = now(),
+            status      = 2,
+            remark      = #{remark},
+            updated_at  = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="markItemStatus">
+        UPDATE wms_stocktake_item
+        SET status     = #{status},
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="markAllItemsStatus">
+        UPDATE wms_stocktake_item
+        SET status     = #{status},
+            updated_at = now()
+        WHERE stocktake_id = #{stocktakeId}
+    </update>
+
+    <select id="countItems" resultType="int">
+        SELECT count(*) FROM wms_stocktake_item WHERE stocktake_id = #{stocktakeId}
+    </select>
+
+    <select id="countUncountedItems" resultType="int">
+        SELECT count(*)
+        FROM wms_stocktake_item
+        WHERE stocktake_id = #{stocktakeId}
+          AND counted_qty IS NULL
+    </select>
+
+    <select id="countDiffItems" resultType="int">
+        SELECT count(*)
+        FROM wms_stocktake_item
+        WHERE stocktake_id = #{stocktakeId}
+          AND diff_qty IS NOT NULL
+          AND diff_qty &lt;&gt; 0
+    </select>
+
+    <select id="countCountedLocations" resultType="int">
+        SELECT count(DISTINCT location_id)
+        FROM wms_stocktake_item
+        WHERE stocktake_id = #{stocktakeId}
+          AND counted_qty IS NOT NULL
+    </select>
+
+    <select id="sumDiffQty" resultType="java.math.BigDecimal">
+        SELECT COALESCE(sum(diff_qty), 0)
+        FROM wms_stocktake_item
+        WHERE stocktake_id = #{stocktakeId}
+    </select>
+
+    <!-- 差异调整 -->
+
+    <insert id="insertAdjust" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_stocktake_adjust
+            (stocktake_id, stocktake_item_id, inventory_id, sku_id, location_id,
+             diff_qty, approved_by, remark)
+        VALUES
+            (#{stocktakeId}, #{stocktakeItemId}, #{inventoryId}, #{skuId}, #{locationId},
+             #{diffQty}, #{approvedBy}, #{remark})
+    </insert>
+
+    <select id="selectAdjusts" resultType="com.wms.vo.StocktakeAdjustVO">
+        SELECT a.id              AS id,
+               a.stocktake_id    AS stocktakeId,
+               a.stocktake_item_id AS stocktakeItemId,
+               a.inventory_id    AS inventoryId,
+               a.sku_id          AS skuId,
+               s.code            AS skuCode,
+               s.name            AS skuName,
+               a.location_id     AS locationId,
+               l.code            AS locationCode,
+               a.diff_qty        AS diffQty,
+               a.approved_by     AS approvedBy,
+               a.approved_at     AS approvedAt,
+               a.remark          AS remark
+        FROM wms_stocktake_adjust a
+        JOIN wms_sku      s ON s.id = a.sku_id
+        JOIN wms_location l ON l.id = a.location_id
+        WHERE a.stocktake_id = #{stocktakeId}
+        ORDER BY a.id
+    </select>
+
+</mapper>

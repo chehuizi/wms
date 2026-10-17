@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.LocationMapper">
+
+    <sql id="columns">
+        l.id, l.warehouse_id, l.code, l.zone, l.location_type, l.capacity,
+        l.allow_negative, l.status, l.remark, l.created_at, l.updated_at, l.deleted
+    </sql>
+
+    <sql id="voColumns">
+        l.id, l.warehouse_id, w.name AS warehouse_name, l.code, l.zone,
+        l.location_type, l.capacity, l.allow_negative, l.status, l.remark,
+        l.created_at, l.updated_at, l.deleted
+    </sql>
+
+    <sql id="pageFrom">
+        FROM wms_location l
+        LEFT JOIN wms_warehouse w ON w.id = l.warehouse_id AND w.deleted = 0
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            l.deleted = 0
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (l.code ILIKE '%' || #{q.keyword} || '%'
+                     OR l.zone ILIKE '%' || #{q.keyword} || '%')
+            </if>
+            <if test="q.status != null">
+                AND l.status = #{q.status}
+            </if>
+            <if test="q.warehouseId != null">
+                AND l.warehouse_id = #{q.warehouseId}
+            </if>
+            <if test="q.locationType != null">
+                AND l.location_type = #{q.locationType}
+            </if>
+            <if test="q.zone != null and q.zone != ''">
+                AND l.zone = #{q.zone}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.LocationVO">
+        SELECT <include refid="voColumns"/>
+        <include refid="pageFrom"/>
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        <include refid="pageFrom"/>
+        <include refid="pageWhere"/>
+    </select>
+
+    <select id="selectVOById" resultType="com.wms.vo.LocationVO">
+        SELECT <include refid="voColumns"/>
+        <include refid="pageFrom"/>
+        WHERE l.id = #{id} AND l.deleted = 0
+    </select>
+
+    <select id="selectById" resultType="com.wms.entity.Location">
+        SELECT <include refid="columns"/>
+        FROM wms_location l
+        WHERE l.id = #{id} AND l.deleted = 0
+    </select>
+
+    <select id="selectByIds" resultType="com.wms.entity.Location">
+        SELECT id, warehouse_id, code, zone, location_type, capacity, allow_negative,
+               status, remark, created_at, updated_at, deleted
+        FROM wms_location
+        WHERE deleted = 0
+        AND id IN
+        <foreach collection="ids" item="it" open="(" separator="," close=")">
+            #{it}
+        </foreach>
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_location
+            (warehouse_id, code, zone, location_type, capacity, allow_negative, status, remark, deleted)
+        VALUES
+            (#{warehouseId}, #{code}, #{zone}, #{locationType}, #{capacity},
+             #{allowNegative}, #{status}, #{remark}, 0)
+    </insert>
+
+    <update id="update">
+        UPDATE wms_location
+        SET warehouse_id    = #{warehouseId},
+            code            = #{code},
+            zone            = #{zone},
+            location_type   = #{locationType},
+            capacity        = #{capacity},
+            allow_negative  = #{allowNegative},
+            status          = #{status},
+            remark          = #{remark},
+            updated_at      = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE wms_location
+        SET deleted = 1, updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="softDeleteByIds">
+        UPDATE wms_location
+        SET deleted = 1, updated_at = now()
+        WHERE deleted = 0
+        AND id IN
+        <foreach collection="ids" item="it" open="(" separator="," close=")">
+            #{it}
+        </foreach>
+    </update>
+
+    <select id="countActiveByWarehouseId" resultType="long">
+        SELECT count(*)
+        FROM wms_location
+        WHERE warehouse_id = #{warehouseId} AND deleted = 0
+    </select>
+
+</mapper>

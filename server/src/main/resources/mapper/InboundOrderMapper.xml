@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.InboundOrderMapper">
+
+    <sql id="voColumns">
+        o.id             AS id,
+        o.order_no       AS orderNo,
+        o.warehouse_id   AS warehouseId,
+        w.name           AS warehouseName,
+        o.supplier_code  AS supplierCode,
+        o.supplier_name  AS supplierName,
+        o.status         AS status,
+        o.expected_at    AS expectedAt,
+        o.finished_at    AS finishedAt,
+        o.remark         AS remark,
+        (SELECT count(*) FROM wms_inbound_item it WHERE it.inbound_id = o.id) AS itemCount,
+        (SELECT COALESCE(sum(it.expected_qty), 0) FROM wms_inbound_item it WHERE it.inbound_id = o.id) AS expectedQty,
+        (SELECT COALESCE(sum(it.received_qty), 0) FROM wms_inbound_item it WHERE it.inbound_id = o.id) AS receivedQty,
+        o.created_at     AS createdAt,
+        o.updated_at     AS updatedAt
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            o.deleted = 0
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (o.order_no      ILIKE '%' || #{q.keyword} || '%'
+                     OR o.supplier_code ILIKE '%' || #{q.keyword} || '%'
+                     OR o.supplier_name ILIKE '%' || #{q.keyword} || '%')
+            </if>
+            <if test="q.warehouseId != null">
+                AND o.warehouse_id = #{q.warehouseId}
+            </if>
+            <if test="q.status != null">
+                AND o.status = #{q.status}
+            </if>
+            <if test="q.startTime != null">
+                AND o.created_at &gt;= #{q.startTime}
+            </if>
+            <if test="q.endTime != null">
+                AND o.created_at &lt;= #{q.endTime}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.InboundOrderVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_inbound_order o
+        JOIN wms_warehouse w ON w.id = o.warehouse_id
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_inbound_order o
+        <include refid="pageWhere"/>
+    </select>
+
+    <select id="selectVOById" resultType="com.wms.vo.InboundOrderVO">
+        SELECT <include refid="voColumns"/>
+        FROM wms_inbound_order o
+        JOIN wms_warehouse w ON w.id = o.warehouse_id
+        WHERE o.id = #{id} AND o.deleted = 0
+    </select>
+
+    <sql id="entityColumns">
+        id, order_no, warehouse_id, supplier_code, supplier_name, status,
+        expected_at, finished_at, remark, created_at, updated_at, deleted
+    </sql>
+
+    <select id="selectById" resultType="com.wms.entity.InboundOrder">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_inbound_order
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <!-- 状态流转前悲观加锁，避免并发重复推进同一单据 -->
+    <select id="selectForUpdate" resultType="com.wms.entity.InboundOrder">
+        SELECT <include refid="entityColumns"/>
+        FROM wms_inbound_order
+        WHERE id = #{id} AND deleted = 0
+        FOR UPDATE
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_inbound_order
+            (order_no, warehouse_id, supplier_code, supplier_name, status,
+             expected_at, remark, deleted)
+        VALUES
+            (#{orderNo}, #{warehouseId}, #{supplierCode}, #{supplierName}, #{status},
+             #{expectedAt}, #{remark}, 0)
+    </insert>
+
+    <update id="update">
+        UPDATE wms_inbound_order
+        SET warehouse_id  = #{warehouseId},
+            supplier_code = #{supplierCode},
+            supplier_name = #{supplierName},
+            expected_at   = #{expectedAt},
+            remark        = #{remark},
+            updated_at    = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="updateStatus">
+        UPDATE wms_inbound_order
+        SET status     = #{status},
+            updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="markFinished">
+        UPDATE wms_inbound_order
+        SET status      = 4,
+            finished_at = #{finishedAt},
+            updated_at  = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE wms_inbound_order
+        SET deleted    = 1,
+            updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <delete id="deleteItems">
+        DELETE FROM wms_inbound_item WHERE inbound_id = #{inboundId}
+    </delete>
+
+    <!-- 明细 -->
+
+    <insert id="insertItem" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_inbound_item (inbound_id, sku_id, expected_qty, received_qty)
+        VALUES (#{inboundId}, #{skuId}, #{expectedQty}, 0)
+    </insert>
+
+    <select id="selectItems" resultType="com.wms.entity.InboundItem">
+        SELECT id, inbound_id, sku_id, expected_qty, received_qty, created_at, updated_at
+        FROM wms_inbound_item
+        WHERE inbound_id = #{inboundId}
+        ORDER BY id
+    </select>
+
+    <select id="selectItemVOs" resultType="com.wms.vo.InboundItemVO">
+        SELECT it.id           AS id,
+               it.inbound_id   AS inboundId,
+               it.sku_id       AS skuId,
+               s.code          AS skuCode,
+               s.name          AS skuName,
+               s.unit          AS unit,
+               it.expected_qty AS expectedQty,
+               it.received_qty AS receivedQty
+        FROM wms_inbound_item it
+        JOIN wms_sku s ON s.id = it.sku_id
+        WHERE it.inbound_id = #{inboundId}
+        ORDER BY it.id
+    </select>
+
+    <sql id="itemColumns">
+        id, inbound_id, sku_id, expected_qty, received_qty, created_at, updated_at
+    </sql>
+
+    <select id="selectItemById" resultType="com.wms.entity.InboundItem">
+        SELECT <include refid="itemColumns"/>
+        FROM wms_inbound_item
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectItemForUpdate" resultType="com.wms.entity.InboundItem">
+        SELECT <include refid="itemColumns"/>
+        FROM wms_inbound_item
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <update id="addReceivedQty">
+        UPDATE wms_inbound_item
+        SET received_qty = received_qty + #{delta},
+            updated_at   = now()
+        WHERE id = #{id}
+    </update>
+
+    <select id="countUnfinishedItems" resultType="int">
+        SELECT count(*)
+        FROM wms_inbound_item
+        WHERE inbound_id = #{inboundId}
+          AND received_qty &lt; expected_qty
+    </select>
+
+    <!-- 收货记录 -->
+
+    <insert id="insertReceipt" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_inbound_receipt
+            (receipt_no, inbound_id, location_id, received_at, operator, remark)
+        VALUES
+            (#{receiptNo}, #{inboundId}, #{locationId}, now(), #{operator}, #{remark})
+    </insert>
+
+    <select id="selectReceipts" resultType="com.wms.entity.InboundReceipt">
+        SELECT id, receipt_no, inbound_id, location_id, received_at, operator, remark, created_at
+        FROM wms_inbound_receipt
+        WHERE inbound_id = #{inboundId}
+        ORDER BY id
+    </select>
+
+    <insert id="insertReceiptItem" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_inbound_receipt_item
+            (receipt_id, inbound_item_id, sku_id, batch_no, serial_no,
+             produced_date, expire_date, qty)
+        VALUES
+            (#{receiptId}, #{inboundItemId}, #{skuId}, #{batchNo}, #{serialNo},
+             #{producedDate}, #{expireDate}, #{qty})
+    </insert>
+
+    <select id="selectReceiptItems" resultType="com.wms.vo.InboundReceiptItemVO">
+        SELECT ri.id              AS id,
+               ri.receipt_id      AS receiptId,
+               ri.inbound_item_id AS inboundItemId,
+               ri.sku_id          AS skuId,
+               s.code             AS skuCode,
+               s.name             AS skuName,
+               ri.batch_no        AS batchNo,
+               ri.serial_no       AS serialNo,
+               ri.produced_date   AS producedDate,
+               ri.expire_date     AS expireDate,
+               ri.qty             AS qty
+        FROM wms_inbound_receipt_item ri
+        JOIN wms_sku s ON s.id = ri.sku_id
+        WHERE ri.receipt_id = #{receiptId}
+        ORDER BY ri.id
+    </select>
+
+</mapper>
