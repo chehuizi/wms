@@ -64,6 +64,15 @@ public class ReportServiceImpl implements ReportService {
         vo.setPendingPickTasks(reportMapper.countPendingPickTasks());
         vo.setStocktakeInProgress(reportMapper.countStocktakeInProgress());
         vo.setExpiringSoonSkuCount(reportMapper.countExpiringSoonSku());
+
+        InventorySummaryRowVO pickAccuracy = reportMapper.selectPickAccuracy();
+        vo.setCorrectPickQty(nvl(pickAccuracy == null ? null : pickAccuracy.getOnHandQty()));
+        vo.setTotalPickedQty(nvl(pickAccuracy == null ? null : pickAccuracy.getLockedQty()));
+        BigDecimal totalPickedQty = vo.getTotalPickedQty();
+        vo.setPickAccuracy(totalPickedQty.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO.setScale(2)
+                : vo.getCorrectPickQty().multiply(new BigDecimal("100"))
+                        .divide(totalPickedQty, 2, java.math.RoundingMode.HALF_UP));
         return vo;
     }
 

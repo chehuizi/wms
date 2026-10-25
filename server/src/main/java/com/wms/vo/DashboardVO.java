@@ -23,4 +23,10 @@ public class DashboardVO {
     private Long stocktakeInProgress;
     /** 30 天内到期 */
     private Long expiringSoonSkuCount;
+    /** 一次拣对数量 */
+    private BigDecimal correctPickQty;
+    /** 拣货总数量 */
+    private BigDecimal totalPickedQty;
+    /** 拣货准确率（百分比） */
+    private BigDecimal pickAccuracy;
 }
