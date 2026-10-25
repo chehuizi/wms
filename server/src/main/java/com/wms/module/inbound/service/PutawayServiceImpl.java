@@ -80,10 +80,18 @@ public class PutawayServiceImpl implements PutawayService {
             throw BizException.paramInvalid("目标库位不能与收货位相同");
         }
 
+        // **效期随货移动**（契约第 15.2 节）：
+        // 目标库位的库存行必须带上批次的生产/失效日期。
+        // 以前这里传的是 (null, null)——货到了存储位，效期就没了，
+        // 于是 FIFO 分配（ORDER BY expire_date）失效、临期预警恒为 0。
+        // 源位那行收货时就建好了（带效期），lockOrCreate 命中已有行不会覆盖，
+        // 所以这里传什么都不会把它冲掉——但传对才对。
         Inventory from = stockService.lockOrCreate(warehouseId, task.getFromLocationId(),
-                task.getSkuId(), task.getBatchNo(), task.getSerialNo(), null, null);
+                task.getSkuId(), task.getBatchNo(), task.getSerialNo(),
+                task.getProducedDate(), task.getExpireDate());
         Inventory to = stockService.lockOrCreate(warehouseId, toLocation.getId(),
-                task.getSkuId(), task.getBatchNo(), task.getSerialNo(), null, null);
+                task.getSkuId(), task.getBatchNo(), task.getSerialNo(),
+                task.getProducedDate(), task.getExpireDate());
 
         // 同事务：源位减、目标位加，两条流水由 StockService 统一写
         stockService.moveStock(from.getId(), to.getId(), task.getQty(),

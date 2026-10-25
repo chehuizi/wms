@@ -20,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,6 +49,10 @@ class PutawayServiceImplTest {
     @InjectMocks
     private PutawayServiceImpl putawayService;
 
+    /** 批次的生产/失效日期——**批次随货移动，效期也是批次的一部分** */
+    private static final LocalDate PRODUCED = LocalDate.of(2026, 10, 1);
+    private static final LocalDate EXPIRE = LocalDate.of(2027, 10, 1);
+
     private PutawayTask task(int status) {
         PutawayTask t = new PutawayTask();
         t.setId(40L);
@@ -55,6 +60,8 @@ class PutawayServiceImplTest {
         t.setSkuId(1L);
         t.setFromLocationId(12L);
         t.setBatchNo("B1");
+        t.setProducedDate(PRODUCED);
+        t.setExpireDate(EXPIRE);
         t.setQty(new BigDecimal("30"));
         t.setStatus(status);
         return t;
@@ -105,20 +112,45 @@ class PutawayServiceImplTest {
         when(locationMapper.selectById(7L)).thenReturn(location(7L, 1));
         when(putawayTaskMapper.selectVOById(40L)).thenReturn(new PutawayTaskVO());
         when(stockService.lockOrCreate(eq(1L), eq(12L), eq(1L), eq("B1"), eq((String) null),
-                eq((java.time.LocalDate) null), eq((java.time.LocalDate) null))).thenReturn(inventory(1L, 12L));
+                eq(PRODUCED), eq(EXPIRE))).thenReturn(inventory(1L, 12L));
         when(stockService.lockOrCreate(eq(1L), eq(7L), eq(1L), eq("B1"), eq((String) null),
-                eq((java.time.LocalDate) null), eq((java.time.LocalDate) null))).thenReturn(inventory(2L, 7L));
+                eq(PRODUCED), eq(EXPIRE))).thenReturn(inventory(2L, 7L));
 
         putawayService.execute(40L, request(7L));
 
         verify(stockService).lockOrCreate(eq(1L), eq(12L), eq(1L), eq("B1"), eq((String) null),
-                eq((java.time.LocalDate) null), eq((java.time.LocalDate) null));
+                eq(PRODUCED), eq(EXPIRE));
         verify(stockService).lockOrCreate(eq(1L), eq(7L), eq(1L), eq("B1"), eq((String) null),
-                eq((java.time.LocalDate) null), eq((java.time.LocalDate) null));
+                eq(PRODUCED), eq(EXPIRE));
         // 移库由 StockService 统一写 5/6 两条流水
         verify(stockService).moveStock(any(), any(), eq(new BigDecimal("30")), any(BizRef.class),
                 eq("李四"), any());
         verify(putawayTaskMapper).markCompleted(eq(40L), eq(7L), eq("李四"));
+    }
+
+    @Test
+    @DisplayName("上架时批次的效期随货移动到目标库位")
+    void shouldMoveBatchExpiryToTargetLocation() {
+        // 回归测试：以前执行上架时给库存行传的是 (null, null)，
+        // 于是货到了存储位效期就没了 —— FIFO 分配（ORDER BY expire_date）
+        // 失效、临期预警恒为 0，而且**没有任何报错**。
+        //
+        // 这个 bug 躲过了 61 个单测，因为原来的测试**把 bug 写进了断言**：
+        // 它自己就 stub 了 (null, null)。测试钉住的是错误行为。
+        when(putawayTaskMapper.selectForUpdate(40L)).thenReturn(task(1));
+        when(inboundOrderMapper.selectById(1L)).thenReturn(inbound());
+        when(locationMapper.selectById(7L)).thenReturn(location(7L, 1));
+        when(putawayTaskMapper.selectVOById(40L)).thenReturn(new PutawayTaskVO());
+        when(stockService.lockOrCreate(eq(1L), eq(12L), eq(1L), eq("B1"), eq((String) null),
+                eq(PRODUCED), eq(EXPIRE))).thenReturn(inventory(1L, 12L));
+        when(stockService.lockOrCreate(eq(1L), eq(7L), eq(1L), eq("B1"), eq((String) null),
+                eq(PRODUCED), eq(EXPIRE))).thenReturn(inventory(2L, 7L));
+
+        putawayService.execute(40L, request(7L));
+
+        // 目标库位那行必须带效期——它是效期先出的依据
+        verify(stockService).lockOrCreate(eq(1L), eq(7L), eq(1L), eq("B1"), eq((String) null),
+                eq(PRODUCED), eq(EXPIRE));
     }
 
     @Test

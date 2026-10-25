@@ -18,6 +18,8 @@
         lt.code             AS toLocationCode,
         t.batch_no          AS batchNo,
         t.serial_no         AS serialNo,
+        t.produced_date     AS producedDate,
+        t.expire_date       AS expireDate,
         t.qty               AS qty,
         t.status            AS status,
         t.operator          AS operator,
@@ -65,7 +67,8 @@
 
     <sql id="entityColumns">
         id, task_no, receipt_item_id, inbound_id, sku_id, from_location_id, to_location_id,
-        batch_no, serial_no, qty, status, operator, executed_at, created_at, updated_at
+        batch_no, serial_no, produced_date, expire_date, qty, status, operator,
+        executed_at, created_at, updated_at
     </sql>
 
     <select id="selectById" resultType="com.wms.entity.PutawayTask">
@@ -94,10 +97,10 @@
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO wms_putaway_task
             (task_no, receipt_item_id, inbound_id, sku_id, from_location_id, to_location_id,
-             batch_no, serial_no, qty, status)
+             batch_no, serial_no, produced_date, expire_date, qty, status)
         VALUES
             (#{taskNo}, #{receiptItemId}, #{inboundId}, #{skuId}, #{fromLocationId}, #{toLocationId},
-             #{batchNo}, #{serialNo}, #{qty}, #{status})
+             #{batchNo}, #{serialNo}, #{producedDate}, #{expireDate}, #{qty}, #{status})
     </insert>
 
     <update id="markCompleted">

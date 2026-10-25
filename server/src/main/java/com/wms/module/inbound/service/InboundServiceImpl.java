@@ -293,6 +293,10 @@ public class InboundServiceImpl implements InboundService {
         task.setFromLocationId(receipt.getLocationId());
         task.setBatchNo(item.getBatchNo());
         task.setSerialNo(item.getSerialNo());
+        // **效期随批次走**：上架任务要带着批次的效期，
+        // 否则执行上架时库存行拿不到效期（货到存储位效期就没了）。
+        task.setProducedDate(item.getProducedDate());
+        task.setExpireDate(item.getExpireDate());
         task.setQty(item.getQty());
         task.setStatus(1);
         putawayTaskMapper.insert(task);

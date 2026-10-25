@@ -3,6 +3,7 @@ package com.wms.vo;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 /**
@@ -25,6 +26,9 @@ public class PutawayTaskVO {
     private String toLocationCode;
     private String batchNo;
     private String serialNo;
+    /** 批次的效期——随货移动，看板/接口要能看见 */
+    private LocalDate producedDate;
+    private LocalDate expireDate;
     private BigDecimal qty;
     private Integer status;
     private String operator;
