@@ -3,6 +3,7 @@ package com.wms.module.report;
 import com.wms.vo.DashboardVO;
 import com.wms.vo.InboundOutboundVO;
 import com.wms.vo.InventorySummaryVO;
+import com.wms.vo.PickAccuracyVO;
 import com.wms.vo.StockAgingVO;
 
 import java.time.LocalDate;
@@ -20,4 +21,6 @@ public interface ReportService {
                                        String granularity);
 
     StockAgingVO stockAging(Long warehouseId, String category);
+
+    PickAccuracyVO pickAccuracy();
 }

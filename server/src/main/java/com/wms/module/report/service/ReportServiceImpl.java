@@ -9,6 +9,7 @@ import com.wms.vo.InboundOutboundRowVO;
 import com.wms.vo.InboundOutboundVO;
 import com.wms.vo.InventorySummaryRowVO;
 import com.wms.vo.InventorySummaryVO;
+import com.wms.vo.PickAccuracyVO;
 import com.wms.vo.StockAgingRowVO;
 import com.wms.vo.StockAgingVO;
 import org.springframework.stereotype.Service;
@@ -119,6 +120,21 @@ public class ReportServiceImpl implements ReportService {
         vo.setRows(rows);
         vo.setTotalInboundQty(totalIn);
         vo.setTotalOutboundQty(totalOut);
+        return vo;
+    }
+
+    @Override
+    public PickAccuracyVO pickAccuracy() {
+        BigDecimal correctPickQty = nvl(reportMapper.sumCorrectPickQty());
+        BigDecimal totalPickQty = nvl(reportMapper.sumTotalPickQty());
+
+        PickAccuracyVO vo = new PickAccuracyVO();
+        vo.setCorrectPickQty(correctPickQty);
+        vo.setTotalPickQty(totalPickQty);
+        vo.setPickAccuracy(totalPickQty.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO.setScale(2)
+                : correctPickQty.multiply(BigDecimal.valueOf(100))
+                        .divide(totalPickQty, 2, java.math.RoundingMode.HALF_UP));
         return vo;
     }
 

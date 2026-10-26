@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.math.BigDecimal;
 
 /**
  * 报表 Mapper，全部为只读聚合查询，不新建任何表。
@@ -35,6 +36,11 @@ public interface ReportMapper {
     long countPendingPickTasks();
 
     long countStocktakeInProgress();
+
+    /** 拣货准确率：一次拣对数量和拣货总数量 */
+    BigDecimal sumCorrectPickQty();
+
+    BigDecimal sumTotalPickQty();
 
     /** 库存汇总分片：groupBy = warehouse / category / sku */
     List<InventorySummaryRowVO> selectInventorySummary(@Param("groupBy") String groupBy,

@@ -211,4 +211,16 @@
         GROUP BY 1
     </select>
 
+    <select id="sumCorrectPickQty" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(CASE WHEN pt.picked_qty = pt.required_qty THEN pt.picked_qty ELSE 0 END), 0)
+        FROM wms_pick_task pt
+        WHERE pt.status = 3
+    </select>
+
+    <select id="sumTotalPickQty" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(pt.picked_qty), 0)
+        FROM wms_pick_task pt
+        WHERE pt.status = 3
+    </select>
+
 </mapper>
