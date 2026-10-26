@@ -2,6 +2,7 @@ package com.wms.mapper;
 
 import com.wms.vo.InboundOutboundRowVO;
 import com.wms.vo.InventorySummaryRowVO;
+import com.wms.vo.PickAccuracyRowVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -50,4 +51,9 @@ public interface ReportMapper {
     /** 库龄分桶聚合：bucket 已在 SQL 中算好，value 固定 0 */
     List<InventorySummaryRowVO> selectStockAging(@Param("warehouseId") Long warehouseId,
                                                   @Param("category") String category);
+
+    /**
+     * 拣货准确率聚合：一次拣对数量和拣货总数量。
+     */
+    PickAccuracyRowVO selectPickAccuracy();
 }

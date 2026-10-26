@@ -9,6 +9,8 @@ import com.wms.vo.InboundOutboundRowVO;
 import com.wms.vo.InboundOutboundVO;
 import com.wms.vo.InventorySummaryRowVO;
 import com.wms.vo.InventorySummaryVO;
+import com.wms.vo.PickAccuracyRowVO;
+import com.wms.vo.PickAccuracyVO;
 import com.wms.vo.StockAgingRowVO;
 import com.wms.vo.StockAgingVO;
 import org.springframework.stereotype.Service;
@@ -148,6 +150,25 @@ public class ReportServiceImpl implements ReportService {
         vo.setRows(rows);
         // 无成本字段，合计也固定为 0
         vo.setTotalValue(ZERO_VALUE);
+        return vo;
+    }
+
+    @Override
+    public PickAccuracyVO pickAccuracy() {
+        PickAccuracyRowVO row = reportMapper.selectPickAccuracy();
+
+        BigDecimal correctQty = row == null || row.getCorrectQty() == null
+                ? BigDecimal.ZERO : row.getCorrectQty();
+        BigDecimal totalPickQty = row == null || row.getTotalPickQty() == null
+                ? BigDecimal.ZERO : row.getTotalPickQty();
+
+        PickAccuracyVO vo = new PickAccuracyVO();
+        vo.setCorrectQty(correctQty);
+        vo.setTotalPickQty(totalPickQty);
+        vo.setAccuracyRate(totalPickQty.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO
+                : correctQty.multiply(BigDecimal.valueOf(100))
+                .divide(totalPickQty, 2, java.math.RoundingMode.HALF_UP));
         return vo;
     }
 

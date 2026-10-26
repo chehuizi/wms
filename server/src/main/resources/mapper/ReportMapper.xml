@@ -163,6 +163,14 @@
         库龄分析：按「最后一次入库（movement_type = 1）距今天数」分桶。
         本版 SKU 无成本字段，value 固定返回 0（契约第 18.4 节）。
     -->
+    <select id="selectPickAccuracy" resultType="com.wms.vo.PickAccuracyRowVO">
+        SELECT
+            COALESCE(SUM(CASE WHEN picked_qty = required_qty THEN picked_qty ELSE 0 END), 0) AS correctQty,
+            COALESCE(SUM(picked_qty), 0) AS totalPickQty
+        FROM wms_pick_task
+        WHERE status = 3
+    </select>
+
     <select id="selectStockAging" resultType="com.wms.vo.InventorySummaryRowVO">
         WITH inventory_rows AS (
             SELECT i.sku_id,
