@@ -64,6 +64,7 @@ public class ReportServiceImpl implements ReportService {
         vo.setPendingPickTasks(reportMapper.countPendingPickTasks());
         vo.setStocktakeInProgress(reportMapper.countStocktakeInProgress());
         vo.setExpiringSoonSkuCount(reportMapper.countExpiringSoonSku());
+        vo.setPickAccuracy(reportMapper.selectPickAccuracy());
         return vo;
     }
 
