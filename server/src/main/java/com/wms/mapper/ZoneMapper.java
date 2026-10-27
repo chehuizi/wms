@@ -1,0 +1,35 @@
+package com.wms.mapper;
+
+import com.wms.dto.ZoneQuery;
+import com.wms.entity.Zone;
+import com.wms.vo.ZoneVO;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
+
+/**
+ * 库区 Mapper，SQL 全部定义在 resources/mapper/ZoneMapper.xml。
+ */
+@Mapper
+public interface ZoneMapper {
+
+    List<ZoneVO> selectPage(@Param("q") ZoneQuery query);
+
+    long countPage(@Param("q") ZoneQuery query);
+
+    ZoneVO selectVOById(@Param("id") Long id);
+
+    Zone selectById(@Param("id") Long id);
+
+    int insert(Zone zone);
+
+    int update(Zone zone);
+
+    int softDeleteById(@Param("id") Long id);
+
+    int softDeleteByIds(@Param("ids") List<Long> ids);
+
+    /** 统计某仓库下未删除的库区数量，用于仓库删除前的级联保护校验 */
+    long countActiveByWarehouseId(@Param("warehouseId") Long warehouseId);
+}
