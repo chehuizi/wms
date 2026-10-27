@@ -64,6 +64,8 @@ public class ReportServiceImpl implements ReportService {
         vo.setPendingPickTasks(reportMapper.countPendingPickTasks());
         vo.setStocktakeInProgress(reportMapper.countStocktakeInProgress());
         vo.setExpiringSoonSkuCount(reportMapper.countExpiringSoonSku());
+        BigDecimal pickAccuracy = reportMapper.selectPickAccuracy();
+        vo.setPickAccuracy(pickAccuracy == null ? BigDecimal.ZERO : pickAccuracy);
         return vo;
     }
 

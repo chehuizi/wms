@@ -36,6 +36,9 @@ public interface ReportMapper {
 
     long countStocktakeInProgress();
 
+    /** 拣货准确率 = 一次拣对数量 / 拣货总数量 */
+    java.math.BigDecimal selectPickAccuracy();
+
     /** 库存汇总分片：groupBy = warehouse / category / sku */
     List<InventorySummaryRowVO> selectInventorySummary(@Param("groupBy") String groupBy,
                                                        @Param("warehouseId") Long warehouseId,
