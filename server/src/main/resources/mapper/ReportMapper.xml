@@ -70,6 +70,16 @@
         库存汇总分片，groupBy = warehouse / category / sku。
         分组键与分组名都在 SQL 里算好，Java 侧不参与聚合。
     -->
+    <select id="selectPickAccuracy" resultType="java.math.BigDecimal">
+        SELECT CASE
+            WHEN COALESCE(SUM(pt.picked_qty), 0) = 0 THEN 0
+            ELSE COALESCE(SUM(CASE WHEN pt.picked_qty = pt.required_qty THEN pt.picked_qty ELSE 0 END), 0)
+                 / SUM(pt.picked_qty)
+        END
+        FROM wms_pick_task pt
+        WHERE pt.status = 3
+    </select>
+
     <select id="selectInventorySummary" resultType="com.wms.vo.InventorySummaryRowVO">
         SELECT
         <choose>

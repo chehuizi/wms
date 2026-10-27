@@ -5,6 +5,7 @@ import com.wms.vo.InventorySummaryRowVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -35,6 +36,9 @@ public interface ReportMapper {
     long countPendingPickTasks();
 
     long countStocktakeInProgress();
+
+    /** 拣货准确率：一次拣对数量 / 拣货总数量 */
+    BigDecimal selectPickAccuracy();
 
     /** 库存汇总分片：groupBy = warehouse / category / sku */
     List<InventorySummaryRowVO> selectInventorySummary(@Param("groupBy") String groupBy,
