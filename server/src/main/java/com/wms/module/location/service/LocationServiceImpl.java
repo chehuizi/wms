@@ -6,8 +6,10 @@ import com.wms.dto.LocationQuery;
 import com.wms.dto.LocationSaveRequest;
 import com.wms.entity.Location;
 import com.wms.entity.Warehouse;
+import com.wms.entity.Zone;
 import com.wms.mapper.LocationMapper;
 import com.wms.mapper.WarehouseMapper;
+import com.wms.mapper.ZoneMapper;
 import com.wms.module.location.LocationService;
 import com.wms.vo.LocationVO;
 import org.springframework.beans.BeanUtils;
@@ -22,10 +24,14 @@ public class LocationServiceImpl implements LocationService {
 
     private final LocationMapper locationMapper;
     private final WarehouseMapper warehouseMapper;
+    private final ZoneMapper zoneMapper;
 
-    public LocationServiceImpl(LocationMapper locationMapper, WarehouseMapper warehouseMapper) {
+    public LocationServiceImpl(LocationMapper locationMapper,
+                               WarehouseMapper warehouseMapper,
+                               ZoneMapper zoneMapper) {
         this.locationMapper = locationMapper;
         this.warehouseMapper = warehouseMapper;
+        this.zoneMapper = zoneMapper;
     }
 
     @Override

@@ -14,6 +14,7 @@ public class Location {
     private Long id;
     private Long warehouseId;
     private String code;
+    private Long zoneId;
     private String zone;
     /** 1=存储位 2=收货暂存位 3=发货暂存位 4=不良品位 5=退货位 */
     private Integer locationType;
