@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.ZoneMapper">
+
+    <sql id="columns">
+        id, warehouse_id, code, name, created_at, updated_at, deleted
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            deleted = 0
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (code ILIKE '%' || #{q.keyword} || '%'
+                     OR name ILIKE '%' || #{q.keyword} || '%')
+            </if>
+            <if test="q.warehouseId != null">
+                AND warehouse_id = #{q.warehouseId}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.entity.Zone">
+        SELECT <include refid="columns"/>
+        FROM wms_zone
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        FROM wms_zone
+        <include refid="pageWhere"/>
+    </select>
+
+    <select id="selectById" resultType="com.wms.entity.Zone">
+        SELECT <include refid="columns"/>
+        FROM wms_zone
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="selectByWarehouseIdAndCode" resultType="com.wms.entity.Zone">
+        SELECT <include refid="columns"/>
+        FROM wms_zone
+        WHERE warehouse_id = #{warehouseId}
+          AND code = #{code}
+          AND deleted = 0
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_zone
+            (warehouse_id, code, name, deleted)
+        VALUES
+            (#{warehouseId}, #{code}, #{name}, 0)
+    </insert>
+
+    <update id="update">
+        UPDATE wms_zone
+        SET warehouse_id = #{warehouseId},
+            code         = #{code},
+            name         = #{name},
+            updated_at   = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE wms_zone
+        SET deleted = 1, updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="softDeleteByIds">
+        UPDATE wms_zone
+        SET deleted = 1, updated_at = now()
+        WHERE deleted = 0
+        AND id IN
+        <foreach collection="ids" item="it" open="(" separator="," close=")">
+            #{it}
+        </foreach>
+    </update>
+
+    <select id="countActiveByWarehouseId" resultType="long">
+        SELECT count(*)
+        FROM wms_zone
+        WHERE warehouse_id = #{warehouseId} AND deleted = 0
+    </select>
+
+    <select id="countActiveLocationsByZoneId" resultType="long">
+        SELECT count(*)
+        FROM wms_location
+        WHERE zone_id = #{zoneId} AND deleted = 0
+    </select>
+
+</mapper>

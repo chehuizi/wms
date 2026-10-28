@@ -5,8 +5,10 @@ import com.wms.common.PageResult;
 import com.wms.dto.LocationQuery;
 import com.wms.dto.LocationSaveRequest;
 import com.wms.entity.Location;
+import com.wms.entity.Zone;
 import com.wms.entity.Warehouse;
 import com.wms.mapper.LocationMapper;
+import com.wms.mapper.ZoneMapper;
 import com.wms.mapper.WarehouseMapper;
 import com.wms.module.location.LocationService;
 import com.wms.vo.LocationVO;
@@ -21,10 +23,14 @@ import java.util.List;
 public class LocationServiceImpl implements LocationService {
 
     private final LocationMapper locationMapper;
+    private final ZoneMapper zoneMapper;
     private final WarehouseMapper warehouseMapper;
 
-    public LocationServiceImpl(LocationMapper locationMapper, WarehouseMapper warehouseMapper) {
+    public LocationServiceImpl(LocationMapper locationMapper,
+                                ZoneMapper zoneMapper,
+                                WarehouseMapper warehouseMapper) {
         this.locationMapper = locationMapper;
+        this.zoneMapper = zoneMapper;
         this.warehouseMapper = warehouseMapper;
     }
 
