@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wms.mapper.ZoneMapper">
+
+    <sql id="columns">
+        id, warehouse_id, code, name, status, remark, created_at, updated_at, deleted
+    </sql>
+
+    <sql id="voColumns">
+        z.id, z.warehouse_id, w.name AS warehouse_name, z.code, z.name,
+        z.status, z.remark, z.created_at, z.updated_at, z.deleted
+    </sql>
+
+    <sql id="pageFrom">
+        FROM wms_zone z
+        LEFT JOIN wms_warehouse w ON w.id = z.warehouse_id AND w.deleted = 0
+    </sql>
+
+    <sql id="pageWhere">
+        <where>
+            z.deleted = 0
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (z.code ILIKE '%' || #{q.keyword} || '%'
+                     OR z.name ILIKE '%' || #{q.keyword} || '%')
+            </if>
+            <if test="q.status != null">
+                AND z.status = #{q.status}
+            </if>
+            <if test="q.warehouseId != null">
+                AND z.warehouse_id = #{q.warehouseId}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.wms.vo.ZoneVO">
+        SELECT <include refid="voColumns"/>
+        <include refid="pageFrom"/>
+        <include refid="pageWhere"/>
+        ${q.orderByClause}
+        LIMIT #{q.resolvedSize} OFFSET #{q.offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT count(*)
+        <include refid="pageFrom"/>
+        <include refid="pageWhere"/>
+    </select>
+
+    <select id="selectVOById" resultType="com.wms.vo.ZoneVO">
+        SELECT <include refid="voColumns"/>
+        <include refid="pageFrom"/>
+        WHERE z.id = #{id} AND z.deleted = 0
+    </select>
+
+    <select id="selectById" resultType="com.wms.entity.Zone">
+        SELECT <include refid="columns"/>
+        FROM wms_zone z
+        WHERE z.id = #{id} AND z.deleted = 0
+    </select>
+
+    <select id="selectByCode" resultType="com.wms.entity.Zone">
+        SELECT <include refid="columns"/>
+        FROM wms_zone z
+        WHERE z.warehouse_id = #{warehouseId}
+          AND z.code = #{code}
+          AND z.deleted = 0
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wms_zone
+            (warehouse_id, code, name, status, remark, deleted)
+        VALUES
+            (#{warehouseId}, #{code}, #{name}, #{status}, #{remark}, 0)
+    </insert>
+
+    <update id="update">
+        UPDATE wms_zone
+        SET warehouse_id = #{warehouseId},
+            code         = #{code},
+            name         = #{name},
+            status       = #{status},
+            remark       = #{remark},
+            updated_at   = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE wms_zone
+        SET deleted = 1, updated_at = now()
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="countActiveLocations" resultType="long">
+        SELECT count(*)
+        FROM wms_location
+        WHERE warehouse_id = #{warehouseId}
+          AND zone = #{zone}
+          AND deleted = 0
+    </select>
+
+</mapper>
