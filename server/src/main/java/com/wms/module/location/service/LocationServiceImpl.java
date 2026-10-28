@@ -5,9 +5,11 @@ import com.wms.common.PageResult;
 import com.wms.dto.LocationQuery;
 import com.wms.dto.LocationSaveRequest;
 import com.wms.entity.Location;
+import com.wms.entity.Zone;
 import com.wms.entity.Warehouse;
 import com.wms.mapper.LocationMapper;
 import com.wms.mapper.WarehouseMapper;
+import com.wms.mapper.ZoneMapper;
 import com.wms.module.location.LocationService;
 import com.wms.vo.LocationVO;
 import org.springframework.beans.BeanUtils;
@@ -22,10 +24,14 @@ public class LocationServiceImpl implements LocationService {
 
     private final LocationMapper locationMapper;
     private final WarehouseMapper warehouseMapper;
+    private final ZoneMapper zoneMapper;
 
-    public LocationServiceImpl(LocationMapper locationMapper, WarehouseMapper warehouseMapper) {
+    public LocationServiceImpl(LocationMapper locationMapper,
+                                WarehouseMapper warehouseMapper,
+                                ZoneMapper zoneMapper) {
         this.locationMapper = locationMapper;
         this.warehouseMapper = warehouseMapper;
+        this.zoneMapper = zoneMapper;
     }
 
     @Override
@@ -110,6 +116,24 @@ public class LocationServiceImpl implements LocationService {
         if (warehouse.getStatus() == null || warehouse.getStatus() != 1) {
             throw BizException.relatedInvalid("仓库已停用: " + warehouse.getName());
         }
+    }
+
+    /**
+     * 库位所属库区必须存在，且库区必须隶属于指定仓库。
+     * Zone 通过外键字段 zoneId 与库位关联，不复制库区实体。
+     */
+    private Zone requireZone(Long zoneId, Long warehouseId) {
+        if (zoneId == null) {
+            return null;
+        }
+        Zone zone = zoneMapper.selectById(zoneId);
+        if (zone == null) {
+            throw BizException.relatedInvalid("库区不存在: " + zoneId);
+        }
+        if (!zone.getWarehouseId().equals(warehouseId)) {
+            throw BizException.relatedInvalid("库区不属于指定仓库: " + zoneId);
+        }
+        return zone;
     }
 
     private void requireExists(Long id) {
