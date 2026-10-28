@@ -35,4 +35,8 @@ public interface LocationMapper {
 
     /** 统计某仓库下未删除的库位数量，用于仓库删除前的级联保护校验 */
     long countActiveByWarehouseId(@Param("warehouseId") Long warehouseId);
+
+    /** 统计指定仓库、库区编码下未删除的库位数量 */
+    long countActiveByWarehouseIdAndZone(@Param("warehouseId") Long warehouseId,
+                                         @Param("zone") String zone);
 }

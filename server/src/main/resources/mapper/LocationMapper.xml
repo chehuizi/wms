@@ -122,4 +122,12 @@
         WHERE warehouse_id = #{warehouseId} AND deleted = 0
     </select>
 
+    <select id="countActiveByWarehouseIdAndZone" resultType="long">
+        SELECT count(*)
+        FROM wms_location
+        WHERE warehouse_id = #{warehouseId}
+          AND zone = #{zone}
+          AND deleted = 0
+    </select>
+
 </mapper>
