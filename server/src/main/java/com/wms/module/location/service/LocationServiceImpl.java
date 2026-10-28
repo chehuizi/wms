@@ -5,8 +5,10 @@ import com.wms.common.PageResult;
 import com.wms.dto.LocationQuery;
 import com.wms.dto.LocationSaveRequest;
 import com.wms.entity.Location;
+import com.wms.entity.Zone;
 import com.wms.entity.Warehouse;
 import com.wms.mapper.LocationMapper;
+import com.wms.mapper.ZoneMapper;
 import com.wms.mapper.WarehouseMapper;
 import com.wms.module.location.LocationService;
 import com.wms.vo.LocationVO;
@@ -22,10 +24,14 @@ public class LocationServiceImpl implements LocationService {
 
     private final LocationMapper locationMapper;
     private final WarehouseMapper warehouseMapper;
+    private final ZoneMapper zoneMapper;
 
-    public LocationServiceImpl(LocationMapper locationMapper, WarehouseMapper warehouseMapper) {
+    public LocationServiceImpl(LocationMapper locationMapper,
+                               WarehouseMapper warehouseMapper,
+                               ZoneMapper zoneMapper) {
         this.locationMapper = locationMapper;
         this.warehouseMapper = warehouseMapper;
+        this.zoneMapper = zoneMapper;
     }
 
     @Override
@@ -50,6 +56,7 @@ public class LocationServiceImpl implements LocationService {
     @Override
     public LocationVO create(LocationSaveRequest request) {
         requireActiveWarehouse(request.getWarehouseId());
+        requireZone(request.getWarehouseId(), request.getZone());
         Location location = new Location();
         BeanUtils.copyProperties(request, location);
         applyDefaults(location);
@@ -67,6 +74,7 @@ public class LocationServiceImpl implements LocationService {
     public LocationVO update(Long id, LocationSaveRequest request) {
         requireExists(id);
         requireActiveWarehouse(request.getWarehouseId());
+        requireZone(request.getWarehouseId(), request.getZone());
         Location location = new Location();
         BeanUtils.copyProperties(request, location);
         location.setId(id);
@@ -109,6 +117,14 @@ public class LocationServiceImpl implements LocationService {
         }
         if (warehouse.getStatus() == null || warehouse.getStatus() != 1) {
             throw BizException.relatedInvalid("仓库已停用: " + warehouse.getName());
+        }
+    }
+
+    /** 库位归属使用库区编码，且库区必须存在并属于指定仓库。 */
+    private void requireZone(Long warehouseId, String zoneCode) {
+        Zone zone = zoneMapper.selectByCodeAndWarehouseId(zoneCode, warehouseId);
+        if (zone == null) {
+            throw BizException.relatedInvalid("库区不存在或不属于指定仓库: " + zoneCode);
         }
     }
 

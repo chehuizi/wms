@@ -2,8 +2,10 @@ package com.wms.module.location.service;
 
 import com.wms.common.BizException;
 import com.wms.dto.LocationSaveRequest;
+import com.wms.entity.Zone;
 import com.wms.entity.Warehouse;
 import com.wms.mapper.LocationMapper;
+import com.wms.mapper.ZoneMapper;
 import com.wms.mapper.WarehouseMapper;
 import com.wms.module.location.service.LocationServiceImpl;
 import com.wms.vo.LocationVO;
@@ -32,6 +34,8 @@ class LocationServiceImplTest {
     private LocationMapper locationMapper;
     @Mock
     private WarehouseMapper warehouseMapper;
+    @Mock
+    private ZoneMapper zoneMapper;
     @InjectMocks
     private LocationServiceImpl locationService;
 
@@ -81,6 +85,14 @@ class LocationServiceImplTest {
         active.setName("华东中心仓");
         active.setStatus(1);
         when(warehouseMapper.selectById(1L)).thenReturn(active);
+
+        Zone zone = new Zone();
+        zone.setId(1L);
+        zone.setWarehouseId(1L);
+        zone.setCode("A");
+        zone.setName("A区");
+        when(zoneMapper.selectByCodeAndWarehouseId("A", 1L)).thenReturn(zone);
+
         // 模拟数据库回填主键，随后 create 会用该 id 回查详情
         when(locationMapper.insert(any(com.wms.entity.Location.class))).thenAnswer(invocation -> {
             invocation.getArgument(0, com.wms.entity.Location.class).setId(1L);
