@@ -10,6 +10,9 @@ import java.math.BigDecimal;
 @Data
 public class DashboardVO {
 
+    /** 库区数量 */
+    private Long zone;
+
     private Long warehouseCount;
     private Long locationCount;
     private Long skuCount;
