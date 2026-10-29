@@ -87,6 +87,7 @@ const menuGroups = [
     title: '主数据',
     items: [
       { path: '/warehouse', title: '仓库管理', sub: 'Warehouses', icon: OfficeBuilding },
+      { path: '/zone', title: '库区管理', sub: 'Zones', icon: Location },
       { path: '/location', title: '库位管理', sub: 'Locations', icon: Location },
       { path: '/sku', title: '商品管理', sub: 'SKUs', icon: Goods },
       { path: '/customer', title: '客户管理', sub: 'Customers', icon: User },
