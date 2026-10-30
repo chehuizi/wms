@@ -143,6 +143,7 @@
                 placeholder="请选择启用中的仓库"
                 filterable
                 style="width: 100%"
+                @change="onWarehouseChange"
               >
                 <el-option v-for="w in warehouseOptions" :key="w.id" :label="`${w.code} ${w.name}`" :value="w.id" />
               </el-select>
@@ -155,7 +156,19 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="库区" prop="zone">
-              <el-input v-model="form.zone" placeholder="如 A" maxlength="32" />
+              <el-select
+                v-model="form.zone"
+                placeholder="请选择所属仓库下的库区"
+                filterable
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="zone in zoneOptions"
+                  :key="zone.id"
+                  :label="`${zone.code} ${zone.name}`"
+                  :value="zone.code"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -223,7 +236,9 @@ import FlagTag from '@/components/FlagTag.vue'
 import { useTablePage } from '@/composables/useTablePage'
 import { locationApi } from '@/api/location'
 import { warehouseApi } from '@/api/warehouse'
+import { zoneApi } from '@/api/zone'
 import type { Location, LocationPayload, LocationQuery, LocationTypeValue } from '@/types/location'
+import type { Zone } from '@/types/zone'
 import { LOCATION_TYPE, LOCATION_TYPE_OPTIONS } from '@/types/location'
 import type { Warehouse } from '@/types/warehouse'
 import type { StatusFlag } from '@/types/common'
@@ -244,6 +259,8 @@ const query = reactive<{
 
 /** 下拉数据源：只取启用中的仓库 */
 const warehouseOptions = ref<Warehouse[]>([])
+/** 当前仓库下可选择的库区，保存时提交库区编码。 */
+const zoneOptions = ref<Zone[]>([])
 
 async function loadWarehouses() {
   try {
@@ -252,6 +269,27 @@ async function loadWarehouses() {
   } catch {
     warehouseOptions.value = []
   }
+}
+
+async function loadZones(warehouseId: number | undefined, selectedZone?: string) {
+  if (warehouseId === undefined) {
+    zoneOptions.value = []
+    return
+  }
+  try {
+    const res = await zoneApi.page({ page: 1, size: 200, warehouseId })
+    zoneOptions.value = res?.list ?? []
+    if (selectedZone && !zoneOptions.value.some((zone) => zone.code === selectedZone)) {
+      zoneOptions.value = []
+    }
+  } catch {
+    zoneOptions.value = []
+  }
+}
+
+async function onWarehouseChange() {
+  form.zone = ''
+  await loadZones(form.warehouseId)
 }
 
 const formRef = ref<FormInstance>()
@@ -354,6 +392,7 @@ function openCreate() {
   resetForm()
   isEdit.value = false
   dialogVisible.value = true
+  void loadZones(form.warehouseId)
 }
 
 function openEdit(row: Location) {
@@ -370,6 +409,7 @@ function openEdit(row: Location) {
   editId.value = row.id
   isEdit.value = true
   dialogVisible.value = true
+  void loadZones(form.warehouseId, row.zone)
 }
 
 async function onSubmit() {

@@ -15,6 +15,8 @@ public class ZoneVO {
     private String warehouseName;
     private String code;
     private String name;
+    /** 看板库区维度标识。 */
+    private String zone;
     private Integer status;
     private String remark;
     private OffsetDateTime createdAt;
